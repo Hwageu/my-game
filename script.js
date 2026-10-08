@@ -10,7 +10,7 @@ function applyTheme(theme, announce = false) {
   const light = theme === "light";
   themeButton.setAttribute("aria-pressed", String(light));
   themeButton.innerHTML = `${light ? "다크" : "라이트"} 테마 <span aria-hidden="true">↗</span>`;
-  document.querySelector('meta[name="theme-color"]').content = light ? "#f4f5ef" : "#0b1018";
+  document.querySelector('meta[name="theme-color"]').content = light ? "#f4f1eb" : "#151515";
   if (announce) themeStatus.textContent = `${light ? "라이트" : "다크"} 테마로 변경했습니다.`;
 }
 let savedTheme;
