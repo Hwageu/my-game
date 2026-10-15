@@ -8,6 +8,9 @@ let ctx = worldCtx;
 const player = { x: 377, y: 292, size: 46, color: "#31ffa6", spriteWidth: 58, spriteHeight: 80 };
 // 직접 튜닝할 값: 한 프레임의 기준 이동량입니다. 1, 3, 5 등을 비교해 보세요.
 let droneSpeed = 1;
+// 직접 튜닝할 플레이어 속도입니다. 드론 속도와 별개입니다.
+let playerSpeed = 3;
+const keys = {};
 const enemies = [
   { x: 210, y: 220, vx: 0.8, vy: 0.55, radius: 20 },
   { x: 610, y: 245, vx: -0.65, vy: 0.8, radius: 20 },
@@ -177,7 +180,7 @@ label("FIELD STATUS",25,550,9,"#60777e");
 label("적 03",130,550,11,"#f49aaf");label("에너지 +10",205,550,11,"#bddc8e");
 label("체력 3 · 피격 후 1초 무적",310,550,11,"#9bafae");
 ctx.textAlign="right";label("DRONE PATROL / LOOP DEMO",775,550,9,"#738a91");ctx.textAlign="left";
-label("방식 A 비교 실습 · 방향키 입력마다 이동 / 충돌 판정 없음",25,581,11,"#778b94");
+label("방식 B 비교 실습 · 방향키로 이동 / 충돌 판정 없음",25,581,11,"#778b94");
 ctx.textAlign="right";label("VIEW 800 × 600",775,581,9,"#778b94");ctx.textAlign="left";
 
 }
@@ -210,6 +213,7 @@ function gameLoop(timestamp) {
   screenCtx.clearRect(0, 0, canvas.width, canvas.height);
 
   // ② 계산: 드론 위치와 표시할 모션 프레임을 갱신합니다.
+  updatePlayer();
   updateDrones();
   motionFrame = Math.floor(timestamp / 160) % 3;
 
@@ -220,18 +224,50 @@ function gameLoop(timestamp) {
   requestAnimationFrame(gameLoop);
 }
 
-// 5장 Step 1~2: 키 이름 확인과 방식 A 비교 실험입니다.
-// 위치를 이벤트에서 직접 바꾸므로 키보드 자동 반복 설정에 영향을 받습니다.
-const inputStep = 5;
+
+// 방식 B: 이벤트에서는 키 상태만 기록하고, 위치 계산은 루프에서 합니다.
+const controlKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "];
 document.addEventListener("keydown", function (e) {
-  console.log(e.key); // Step 1 입력 확인용. 방식 B로 전환할 때 제거합니다.
-  if (e.key === "ArrowLeft") {
-    player.x = player.x - inputStep;
-  } else if (e.key === "ArrowRight") {
-    player.x = player.x + inputStep;
-  } else if (e.key === "ArrowUp") {
-    player.y = player.y - inputStep;
-  } else if (e.key === "ArrowDown") {
-    player.y = player.y + inputStep;
+  if (controlKeys.includes(e.key)) {
+    e.preventDefault();
+    keys[e.key] = true;
   }
 });
+document.addEventListener("keyup", function (e) {
+  if (controlKeys.includes(e.key)) {
+    e.preventDefault();
+    keys[e.key] = false;
+  }
+});
+function releaseKeys() {
+  for (const key of Object.keys(keys)) keys[key] = false;
+}
+// 탭을 바꾸거나 창 밖에서 손을 뗐을 때 계속 이동하는 현상을 막습니다.
+window.addEventListener("blur", releaseKeys);
+document.addEventListener("visibilitychange", function () {
+  if (document.hidden) releaseKeys();
+});
+
+function updatePlayer() {
+  let moveX = 0;
+  let moveY = 0;
+  // 각 if를 따로 검사하므로 두 키를 누르면 대각선으로 이동합니다.
+  if (keys["ArrowLeft"]) moveX = moveX - 1;
+  if (keys["ArrowRight"]) moveX = moveX + 1;
+  if (keys["ArrowUp"]) moveY = moveY - 1;
+  if (keys["ArrowDown"]) moveY = moveY + 1;
+  const length = Math.hypot(moveX, moveY);
+  if (length > 0) {
+    // 대각선에서도 직선과 같은 속도를 유지합니다.
+    player.x = player.x + moveX / length * playerSpeed;
+    player.y = player.y + moveY / length * playerSpeed;
+  }
+  // Step 3 비교 실습용: 캐릭터 전체가 보이도록 화면 안에 둡니다.
+  // 넓은 월드·카메라를 연결하는 Step 6에서 이 제한은 제거합니다.
+  const minX = (player.spriteWidth - player.size) / 2;
+  const maxX = canvas.width - (player.spriteWidth + player.size) / 2;
+  const minY = 99 + (player.spriteHeight - player.size) / 2;
+  const maxY = 527 - (player.spriteHeight + player.size) / 2;
+  player.x = Math.max(minX, Math.min(maxX, player.x));
+  player.y = Math.max(minY, Math.min(maxY, player.y));
+}
