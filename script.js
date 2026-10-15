@@ -1,6 +1,10 @@
 // 생성한 배경·투명 스프라이트와 Canvas 조명을 조합한 정적인 첫 화면입니다.
 const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
+const screenCtx = canvas.getContext("2d");
+const worldCanvas = document.createElement("canvas");
+worldCanvas.width = 400; worldCanvas.height = 300;
+const worldCtx = worldCanvas.getContext("2d");
+let ctx = worldCtx;
 const player = { x: 377, y: 292, size: 46, color: "#31ffa6", spriteWidth: 58, spriteHeight: 80 };
 const enemies = [{ x: 210, y: 220, radius: 20 }, { x: 610, y: 245, radius: 20 }, { x: 565, y: 435, radius: 20 }];
 const droneSize = { width: 82, height: 52 };
@@ -25,7 +29,7 @@ function line(x, y, x2, y2, color, width = 1) {
   ctx.lineWidth = 1;
 }
 function label(text, x, y, size = 12, color = "#9cabb6", weight = "normal") {
-  ctx.fillStyle = color; ctx.font = `${weight} ${size}px sans-serif`; ctx.fillText(text, x, y);
+  ctx.fillStyle = color; ctx.font = `${weight} ${size}px monospace`; ctx.fillText(text, x, y);
 }
 function glow(x, y, radius, color) {
   const light = ctx.createRadialGradient(x, y, 0, x, y, radius);
@@ -37,7 +41,8 @@ function glow(x, y, radius, color) {
 const floorImage = new Image();
 const survivorImage = new Image();
 const droneImage = new Image();
-let pendingImages = 3;
+const energyImage = new Image();
+let pendingImages = 4;
 function finishImageLoad() {
   pendingImages -= 1;
   if (pendingImages === 0) drawScene();
@@ -45,7 +50,8 @@ function finishImageLoad() {
 for (const [image, path] of [
   [floorImage, "assets/floor-tile.jpg"],
   [survivorImage, "assets/survivor.png"],
-  [droneImage, "assets/drone.png"]
+  [droneImage, "assets/drone.png"],
+  [energyImage, "assets/energy-core.png"]
 ]) {
   image.onload = finishImageLoad;
   image.onerror = finishImageLoad;
@@ -53,6 +59,9 @@ for (const [image, path] of [
 }
 
 function drawScene() {
+ctx = worldCtx;
+ctx.setTransform(0.5, 0, 0, 0.5, 0, 0);
+ctx.imageSmoothingEnabled = false;
 ctx.clearRect(0, 0, canvas.width, canvas.height);
 ctx.fillStyle = "#17232b"; ctx.fillRect(0, 0, 800, 600);
 ctx.save();
@@ -108,13 +117,17 @@ for (const enemy of enemies) {
   }
 }
 
-// 코어: 떠 있는 결정과 바닥의 빛 고리입니다.
-const ex=energy.x+energy.size/2, ey=energy.y+energy.size/2;
-glow(ex,ey,48,"rgba(166,255,86,0.16)");
-ctx.strokeStyle="#b4ec7455";ctx.beginPath();ctx.ellipse(ex,ey+15,17,6,0,0,Math.PI*2);ctx.stroke();
-polygon([[ex,ey-14],[ex+10,ey],[ex,ey+13],[ex-10,ey]],"#caff85","#e9ffc8");
-polygon([[ex,ey-14],[ex,ey+13],[ex-10,ey]],"#4d9f60");
-line(ex,ey-8,ex+5,ey,"#ffffff",2);
+// 코어 시트의 첫 칸만 정적으로 표시합니다. 회전·부유 재생은 이후 단계입니다.
+const ex = energy.x + energy.size / 2, ey = energy.y + energy.size / 2;
+glow(ex, ey, 40, "rgba(166,255,86,0.13)");
+ctx.strokeStyle = "#b4ec7455";
+ctx.beginPath(); ctx.ellipse(ex, ey + 19, 17, 5, 0, 0, Math.PI * 2); ctx.stroke();
+if (energyImage.naturalWidth > 0) {
+  ctx.drawImage(energyImage, 0, 0, energyImage.naturalWidth / 2, energyImage.naturalHeight / 2,
+    ex - 27, ey - 27, 54, 54);
+} else {
+  circle(ex, ey, 8, "#baff75");
+}
 // 먼지와 빛 입자를 고정 좌표에 그립니다.
 for(let i=0;i<32;i++) {
   const x=60+(i*137)%680,y=170+(i*71)%300;
@@ -125,8 +138,12 @@ const vignette=ctx.createRadialGradient(400,310,140,400,310,440);
 vignette.addColorStop(0,"#00000000");vignette.addColorStop(1,"#00000035");
 ctx.fillStyle=vignette;ctx.fillRect(0,100,800,425);
 
-// 월드 그리기를 마치고 HUD는 화면 좌표에 고정합니다.
+// 저해상도 월드를 두 배로 확대합니다. HUD는 화면에 고정합니다.
 ctx.restore();
+screenCtx.imageSmoothingEnabled = false;
+screenCtx.clearRect(0, 0, 800, 600);
+screenCtx.drawImage(worldCanvas, 0, 0, 800, 600);
+ctx = screenCtx;
 ctx.fillStyle="rgba(6,12,18,0.94)";ctx.fillRect(0,0,800,99);ctx.fillRect(0,527,800,73);
 line(24,98,776,98,"#36434b");line(24,527,776,527,"#36434b");
 label("N / S",24,29,13,"#9fddb9","bold");
