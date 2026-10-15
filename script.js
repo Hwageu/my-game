@@ -14,7 +14,7 @@ const keys = {};
 // camera는 월드에서 화면 왼쪽 위가 가리키는 위치입니다.
 const camera = { x: 0, y: 0 };
 let walkFrame = 0;
-let sideGaitPhase = 0;
+const sideWalkFrames = [{"x":224,"y":64,"w":512,"h":747},{"x":1016,"y":81,"w":545,"h":723}];
 // 균등 분할 대신 실제 그림 경계를 사용해 다음 행의 머리가 섞이지 않게 합니다.
 const idleFrames = [
   { x: 91, y: 18, w: 211, h: 293 },
@@ -76,9 +76,10 @@ function glow(x, y, radius, color) {
 const floorImage = new Image();
 const survivorImage = new Image();
 const survivorWalkImage = new Image();
+const survivorSideImage = new Image();
 const droneImage = new Image();
 const energyImage = new Image();
-let pendingImages = 5;
+let pendingImages = 6;
 function finishImageLoad() {
   pendingImages -= 1;
   if (pendingImages === 0) requestAnimationFrame(gameLoop);
@@ -87,6 +88,7 @@ for (const [image, path] of [
   [floorImage, "assets/floor-tile.jpg"],
   [survivorImage, "assets/survivor-directions.png"],
   [survivorWalkImage, "assets/survivor-walk.png"],
+  [survivorSideImage, "assets/survivor-sidewalk.png"],
   [droneImage, "assets/drone-directions.png"],
   [energyImage, "assets/energy-core.png"]
 ]) {
@@ -95,42 +97,18 @@ for (const [image, path] of [
   image.src = path;
 }
 
-// 측면 보행은 두 다리를 반대 주기로 계산해 한 발이 고정되는 현상을 막습니다.
-function sideLegPose(phase) {
-  return { stride: Math.sin(phase) * 10, lift: Math.max(0, Math.cos(phase)) * 5 };
-}
-function drawSideLeg(px, footY, phase, facing, near) {
-  const pose = sideLegPose(phase);
-  const hipX = px + (near ? 2 : -2);
-  const kneeX = hipX + facing * pose.stride * 0.45;
-  const kneeY = footY - 16 - pose.lift * 0.3;
-  const ankleX = hipX + facing * pose.stride;
-  const ankleY = footY - 2 - pose.lift;
-  // 바깥 윤곽, 장갑판, 하이라이트를 겹쳐 기존 상체의 금속색과 맞춥니다.
-  ctx.save();
-  ctx.lineCap = "round";
-  line(hipX, footY - 30, kneeX, kneeY, "#121a1d", 9);
-  line(hipX, footY - 29, kneeX, kneeY, near ? "#667267" : "#3b4944", 6);
-  circle(kneeX, kneeY, 4, near ? "#7c8877" : "#48584f", "#1b2726");
-  line(kneeX, kneeY + 2, ankleX, ankleY, "#172023", 8);
-  line(kneeX, kneeY + 2, ankleX, ankleY, near ? "#53655b" : "#34463e", 5);
-  line(kneeX, kneeY + 4, ankleX, ankleY - 1, "#8b96813b", 1);
-  polygon([[ankleX-4,ankleY-3],[ankleX+4,ankleY-3],
-    [ankleX+4+facing*5,ankleY+2],[ankleX-4+facing*5,ankleY+3]],
-    near ? "#647367" : "#394a40", "#14201e");
-  ctx.restore();
-}
+// 좌우 보행은 양발이 교차하는 전신 스프라이트만 사용합니다.
 function drawSideWalk(px, py) {
-  const frame = idleFrames[player.direction];
-  const scale = 76 / frame.h;
-  const facing = player.direction === 1 ? -1 : 1;
-  const footY = py + 38;
-  drawSideLeg(px, footY, sideGaitPhase + Math.PI, facing, false);
-  drawSideLeg(px, footY, sideGaitPhase, facing, true);
-  // 원래 상체만 사용합니다. 하체는 별도 계산하므로 기존 발이 겹치지 않습니다.
-  const upperHeight = Math.floor(frame.h * 0.61);
-  ctx.drawImage(survivorImage, frame.x, frame.y, frame.w, upperHeight,
-    px - frame.w * scale / 2, footY - 76, frame.w * scale, upperHeight * scale);
+  const frame = sideWalkFrames[walkFrame];
+  const height = 76;
+  const width = frame.w * height / frame.h;
+  ctx.save();
+  ctx.translate(px, py + 38);
+  // 두 원본 모두 왼쪽을 봅니다. 오른쪽은 전신을 함께 반사합니다.
+  if (player.direction === 2) ctx.scale(-1, 1);
+  ctx.drawImage(survivorSideImage, frame.x, frame.y, frame.w, frame.h,
+    -width / 2, -height, width, height);
+  ctx.restore();
 }
 
 function drawScene() {
@@ -176,7 +154,7 @@ glow(px, py + 10, 65, "rgba(38,255,174,0.12)");
 ctx.fillStyle = "#00000065";
 ctx.beginPath(); ctx.ellipse(px + 4, py + 30, 25, 10, -0.15, 0, Math.PI * 2); ctx.fill();
 if (survivorImage.naturalWidth > 0) {
-  if (player.moving && (player.direction === 1 || player.direction === 2)) {
+  if (player.moving && (player.direction === 1 || player.direction === 2) && survivorSideImage.naturalWidth > 0) {
     drawSideWalk(px, py);
   } else {
   const walking = player.moving && survivorWalkImage.naturalWidth > 0;
@@ -341,7 +319,6 @@ function gameLoop(timestamp) {
   updateCamera();
   updateMapItems();
   updateDrones();
-  if (player.moving) sideGaitPhase += playerSpeed * 0.1;
   walkFrame = player.moving ? Math.floor(timestamp / 180) % 2 : 0;
   motionFrame = Math.floor(timestamp / 160) % 3;
 
