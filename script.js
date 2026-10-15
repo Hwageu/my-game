@@ -5,7 +5,8 @@ const ctx = canvas.getContext("2d");
 // 상태: 위치와 속도입니다. 속도의 단위는 한 프레임에 이동하는 픽셀입니다.
 let ballX = 400;
 let ballY = 300;
-let speedX = 3;
+let speedX = 2;
+let speedY = 2;
 const radius = 20;
 
 function gameLoop() {
@@ -14,6 +15,7 @@ function gameLoop() {
 
   // ② 계산: 현재 위치에 속도를 더해 다음 위치를 구합니다.
   ballX = ballX + speedX;
+  ballY = ballY + speedY;
 
   // 공의 중심이 아니라 가장자리가 벽에 닿을 때 방향을 바꿉니다.
   // 위치도 보정해 벽에 끼어 떨리지 않게 합니다.
@@ -23,6 +25,15 @@ function gameLoop() {
   } else if (ballX - radius < 0) {
     ballX = radius;
     speedX = Math.abs(speedX);
+  }
+
+  // 위아래 경계도 반지름을 포함해 위치와 방향을 보정합니다.
+  if (ballY + radius > canvas.height) {
+    ballY = canvas.height - radius;
+    speedY = -Math.abs(speedY);
+  } else if (ballY - radius < 0) {
+    ballY = radius;
+    speedY = Math.abs(speedY);
   }
 
   // ③ 그리기: 계산한 새 위치에 흰 공을 그립니다.
