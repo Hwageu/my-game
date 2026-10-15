@@ -7,7 +7,7 @@ const worldCtx = worldCanvas.getContext("2d");
 let ctx = worldCtx;
 const player = { x: 377, y: 292, size: 46, color: "#31ffa6", spriteWidth: 58, spriteHeight: 80 };
 // 직접 튜닝할 값: 한 프레임의 기준 이동량입니다. 1, 3, 5 등을 비교해 보세요.
-let droneSpeed = 2;
+let droneSpeed = 1;
 const enemies = [
   { x: 210, y: 220, vx: 0.8, vy: 0.55, radius: 20 },
   { x: 610, y: 245, vx: -0.65, vy: 0.8, radius: 20 },
@@ -182,22 +182,23 @@ ctx.textAlign="right";label("VIEW 800 × 600",775,581,9,"#778b94");ctx.textAlign
 
 }
 
-// 4장 연습에서는 드론을 화면 안에서 왕복시킵니다.
-// 이것은 드론 표시 범위 처리이며, 이후 넓은 월드에서 플레이어를 막는 벽이 아닙니다.
+// 화면 가장자리는 벽이 아닙니다. 완전히 나간 드론을 반대편 바깥에서 다시 표시합니다.
+// 넓은 월드의 실제 좌표·카메라 추적은 5주차에 연결합니다.
 function updateDrones() {
   const half = droneSize.width / 2;
+  const spanX = canvas.width + half * 2;
+  const minY = 99 - half;
+  const maxY = 527 + half;
+  const spanY = maxY - minY;
   for (const enemy of enemies) {
     enemy.x = enemy.x + enemy.vx * droneSpeed;
     enemy.y = enemy.y + enemy.vy * droneSpeed;
-    if (enemy.x > canvas.width - half) {
-      enemy.x = canvas.width - half; enemy.vx = -Math.abs(enemy.vx);
-    } else if (enemy.x < half) {
-      enemy.x = half; enemy.vx = Math.abs(enemy.vx);
+    // 스프라이트 전체가 화면 밖으로 나간 후 위치만 옮깁니다. 속도·방향은 유지합니다.
+    if (enemy.x > canvas.width + half || enemy.x < -half) {
+      enemy.x = ((enemy.x + half) % spanX + spanX) % spanX - half;
     }
-    if (enemy.y > 527 - half) {
-      enemy.y = 527 - half; enemy.vy = -Math.abs(enemy.vy);
-    } else if (enemy.y < 99 + half) {
-      enemy.y = 99 + half; enemy.vy = Math.abs(enemy.vy);
+    if (enemy.y > maxY || enemy.y < minY) {
+      enemy.y = ((enemy.y - minY) % spanY + spanY) % spanY + minY;
     }
   }
 }
