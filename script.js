@@ -1,8 +1,9 @@
-// 외부 이미지 없이 Canvas 도형, 조명, 그림자를 조합한 정적인 첫 화면입니다.
+// 생성한 배경·투명 스프라이트와 Canvas 조명을 조합한 정적인 첫 화면입니다.
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-const player = { x: 377, y: 292, size: 46, color: "#31ffa6" };
+const player = { x: 377, y: 292, size: 46, color: "#31ffa6", spriteWidth: 58, spriteHeight: 80 };
 const enemies = [{ x: 210, y: 220, radius: 20 }, { x: 610, y: 245, radius: 20 }, { x: 565, y: 435, radius: 20 }];
+const droneSize = { width: 82, height: 52 };
 const energy = { x: 285, y: 410, size: 16 };
 
 // 같은 모양과 조명을 반복해서 그릴 수 있도록 작은 함수로 나눕니다.
@@ -32,11 +33,24 @@ function glow(x, y, radius, color) {
   ctx.fillStyle = light; ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
 }
 
-// 이미지를 불러온 뒤 반사 타일로 반복 배경을 구성합니다.
+// 모든 이미지가 로딩 또는 오류 처리된 뒤 첫 화면을 한 번 그립니다.
 const floorImage = new Image();
-floorImage.onload = drawScene;
-floorImage.onerror = drawScene;
-floorImage.src = "assets/floor-tile.jpg";
+const survivorImage = new Image();
+const droneImage = new Image();
+let pendingImages = 3;
+function finishImageLoad() {
+  pendingImages -= 1;
+  if (pendingImages === 0) drawScene();
+}
+for (const [image, path] of [
+  [floorImage, "assets/floor-tile.jpg"],
+  [survivorImage, "assets/survivor.png"],
+  [droneImage, "assets/drone.png"]
+]) {
+  image.onload = finishImageLoad;
+  image.onerror = finishImageLoad;
+  image.src = path;
+}
 
 function drawScene() {
 ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -66,38 +80,32 @@ if (floorImage.complete && floorImage.naturalWidth > 0) {
   label("배경 이미지를 불러오지 못했습니다", 24, 130, 12);
 }
 glow(400,310,270,"rgba(31,128,129,0.12)");
-// 생존자: 다리, 어깨 장갑, 몸통과 헬멧을 겹쳐 그립니다.
+// 생존자: 투명 이미지의 바깥 여백을 제외하고 몸체를 그립니다.
 const px = player.x + player.size / 2, py = player.y + player.size / 2;
-glow(px,py+9,64,"rgba(38,255,174,0.15)");
-ctx.save(); ctx.translate(px,py);
-ctx.fillStyle = "#00000070"; ctx.beginPath();ctx.ellipse(6,17,23,12,0,0,Math.PI*2);ctx.fill();
-polygon([[-14,8],[-3,9],[-5,25],[-17,25]],"#172a30","#4b6670");
-polygon([[4,9],[15,8],[18,25],[5,25]],"#172a30","#4b6670");
-polygon([[-18,-9],[17,-9],[20,13],[0,20],[-20,12]],"#4e6c6b","#91ada1");
-polygon([[-12,-4],[12,-4],[10,10],[0,15],[-11,9]],"#1b3b3a");
-polygon([[-23,-11],[-14,-15],[-11,-3],[-23,1]],"#63837a","#8cac9d");
-polygon([[14,-15],[24,-10],[24,2],[13,-3]],"#63837a","#8cac9d");
-polygon([[-14,-22],[10,-24],[18,-15],[14,-3],[-11,0],[-19,-10]],"#718c82","#b8c8b5");
-polygon([[-14,-16],[11,-18],[14,-11],[8,-7],[-12,-7]],"#082d2b");
-ctx.save();ctx.shadowColor=player.color;ctx.shadowBlur=12;
-line(-12,-12,10,-13,player.color,3);line(-5,7,5,7,player.color,2);ctx.restore();
-line(-15,20,-7,20,"#9cbaae",2);line(8,20,15,20,"#9cbaae",2);
-ctx.restore();
+glow(px, py + 10, 65, "rgba(38,255,174,0.12)");
+ctx.fillStyle = "#00000065";
+ctx.beginPath(); ctx.ellipse(px + 4, py + 30, 25, 10, -0.15, 0, Math.PI * 2); ctx.fill();
+if (survivorImage.naturalWidth > 0) {
+  // 원본의 투명 여백만 제외합니다. 조명과 색상은 원본 그대로 사용합니다.
+  ctx.drawImage(survivorImage, 330, 210, 620, 810,
+    px - player.spriteWidth / 2, py - player.spriteHeight / 2,
+    player.spriteWidth, player.spriteHeight);
+} else {
+  label("생존자 이미지 로딩 실패", px - 65, py, 11, "#ffb8b8");
+}
 
-// 적: 기계 날개와 붉은 렌즈를 가진 드론입니다.
+// 드론: 각 위치에 동일한 스프라이트를 재사용합니다. 이동은 이후 구현합니다.
 for (const enemy of enemies) {
-  ctx.save();ctx.translate(enemy.x,enemy.y);
-  ctx.fillStyle="#00000055";ctx.beginPath();ctx.ellipse(5,18,27,10,0,0,Math.PI*2);ctx.fill();
-  glow(0,0,55,"rgba(255,45,100,0.12)");
-  polygon([[-9,-8],[-27,-16],[-33,-4],[-17,8]],"#3e3a4b","#797080");
-  polygon([[9,-8],[27,-16],[33,-4],[17,8]],"#3e3a4b","#797080");
-  polygon([[-16,-13],[0,-22],[16,-13],[19,7],[0,18],[-19,7]],"#292a37","#86808b");
-  polygon([[-13,-12],[0,-18],[13,-12],[10,-5],[-10,-5]],"#68616d");
-  circle(0,0,11,"#0e111b","#aa526c");
-  ctx.save();ctx.shadowColor="#ff366f";ctx.shadowBlur=16;
-  circle(0,0,5,"#ff477b");circle(-23,-5,2,"#ffaac6");circle(23,-5,2,"#ffaac6");ctx.restore();
-  circle(-1,-2,2,"#ffe1eb");line(-7,12,7,12,"#dd557e",2);
-  ctx.restore();
+  glow(enemy.x, enemy.y + 7, 55, "rgba(255,45,100,0.10)");
+  ctx.fillStyle = "#00000055";
+  ctx.beginPath(); ctx.ellipse(enemy.x + 4, enemy.y + 23, 32, 11, 0, 0, Math.PI * 2); ctx.fill();
+  if (droneImage.naturalWidth > 0) {
+    ctx.drawImage(droneImage, 35, 245, 1210, 755,
+      enemy.x - droneSize.width / 2, enemy.y - droneSize.height / 2,
+      droneSize.width, droneSize.height);
+  } else {
+    label("드론 이미지 로딩 실패", enemy.x - 60, enemy.y, 11, "#ffb8b8");
+  }
 }
 
 // 코어: 떠 있는 결정과 바닥의 빛 고리입니다.
