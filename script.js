@@ -14,6 +14,19 @@ const keys = {};
 // camera는 월드에서 화면 왼쪽 위가 가리키는 위치입니다.
 const camera = { x: 0, y: 0 };
 let walkFrame = 0;
+// 균등 분할 대신 실제 그림 경계를 사용해 다음 행의 머리가 섞이지 않게 합니다.
+const idleFrames = [
+  { x: 91, y: 18, w: 211, h: 293 },
+  { x: 130, y: 367, w: 155, h: 316 },
+  { x: 102, y: 714, w: 157, h: 315 },
+  { x: 89, y: 1061, w: 216, h: 324 }
+];
+const walkingFrames = [
+  [{ x:159,y:64,w:209,h:315 }, { x:655,y:64,w:210,h:315 }],
+  [{ x:151,y:425,w:231,h:309 }, { x:651,y:424,w:222,h:311,flip:true }],
+  [{ x:160,y:779,w:240,h:307 }, { x:627,y:780,w:240,h:303,flip:true }],
+  [{ x:162,y:1137,w:205,h:332 }, { x:661,y:1136,w:198,h:332 }]
+];
 const enemies = [
   { x: 210, y: 220, vx: 0.8, vy: 0.55, radius: 20 },
   { x: 610, y: 245, vx: -0.65, vy: 0.8, radius: 20 },
@@ -22,7 +35,14 @@ const enemies = [
 let motionFrame = 0;
 let floorPattern = null;
 const droneSize = { width: 82, height: 52 };
-const energy = { x: 285, y: 410, size: 16 };
+const mapChunkSize = 640;
+const itemChunks = new Map();
+let visibleCores = [];
+// 드론 수는 3대로 유지하고 첫 등장 시점을 조금씩 나눕니다.
+for (let i = 0; i < enemies.length; i++) {
+  enemies[i].active = false;
+  enemies[i].spawnDelay = i * 100;
+}
 
 // 같은 모양과 조명을 반복해서 그릴 수 있도록 작은 함수로 나눕니다.
 function polygon(points, fill, stroke) {
@@ -54,9 +74,10 @@ function glow(x, y, radius, color) {
 // 모든 이미지 로딩을 마치면 게임 루프를 한 번만 시작합니다.
 const floorImage = new Image();
 const survivorImage = new Image();
+const survivorWalkImage = new Image();
 const droneImage = new Image();
 const energyImage = new Image();
-let pendingImages = 4;
+let pendingImages = 5;
 function finishImageLoad() {
   pendingImages -= 1;
   if (pendingImages === 0) requestAnimationFrame(gameLoop);
@@ -64,6 +85,7 @@ function finishImageLoad() {
 for (const [image, path] of [
   [floorImage, "assets/floor-tile.jpg"],
   [survivorImage, "assets/survivor-directions.png"],
+  [survivorWalkImage, "assets/survivor-walk.png"],
   [droneImage, "assets/drone-directions.png"],
   [energyImage, "assets/energy-core.png"]
 ]) {
@@ -104,7 +126,7 @@ if (floorImage.complete && floorImage.naturalWidth > 0) {
   }
   ctx.fillStyle = floorPattern;
   ctx.fillRect(camera.x, camera.y + 99, 800, 428);
-  ctx.fillStyle = "rgba(5,17,24,0.28)"; ctx.fillRect(0, 99, 800, 428);
+  ctx.fillStyle = "rgba(5,17,24,0.28)"; ctx.fillRect(camera.x, camera.y + 99, 800, 428);
 } else {
   label("배경 이미지를 불러오지 못했습니다", 24, 130, 12);
 }
@@ -115,18 +137,22 @@ glow(px, py + 10, 65, "rgba(38,255,174,0.12)");
 ctx.fillStyle = "#00000065";
 ctx.beginPath(); ctx.ellipse(px + 4, py + 30, 25, 10, -0.15, 0, Math.PI * 2); ctx.fill();
 if (survivorImage.naturalWidth > 0) {
-  // 행은 아래·왼쪽·오른쪽·위, 열은 대기·걷기 A·걷기 B입니다.
-  const cellWidth = survivorImage.naturalWidth / 3;
-  const cellHeight = survivorImage.naturalHeight / 4;
-  ctx.drawImage(survivorImage, walkFrame * cellWidth, player.direction * cellHeight, cellWidth, cellHeight,
-    px - player.spriteWidth / 2, py - player.spriteHeight / 2,
-    player.spriteWidth, player.spriteHeight);
-} else {
-  label("생존자 이미지 로딩 실패", px - 65, py, 11, "#ffb8b8");
-}
+  const walking = player.moving && survivorWalkImage.naturalWidth > 0;
+  const frame = walking ? walkingFrames[player.direction][walkFrame] : idleFrames[player.direction];
+  const image = walking ? survivorWalkImage : survivorImage;
+  const height = 76;
+  const width = frame.w * height / frame.h;
+  // 모든 프레임의 발 기준점을 맞춰 걷는 동안 몸이 위아래로 튀지 않게 합니다.
+  ctx.save();
+  ctx.translate(px, py + 38);
+  if (frame.flip) ctx.scale(-1, 1);
+  ctx.drawImage(image, frame.x, frame.y, frame.w, frame.h, -width / 2, -height, width, height);
+  ctx.restore();
+} else label("생존자 이미지 로딩 실패", px - 65, py, 11, "#ffb8b8");
 
 // 드론: 진행 방향에 해당하는 행과 추진기 모션 프레임을 그립니다.
 for (const enemy of enemies) {
+  if (!enemy.active) continue;
   glow(enemy.x, enemy.y + 7, 55, "rgba(255,45,100,0.10)");
   ctx.fillStyle = "#00000055";
   ctx.beginPath(); ctx.ellipse(enemy.x + 4, enemy.y + 23, 32, 11, 0, 0, Math.PI * 2); ctx.fill();
@@ -143,16 +169,17 @@ for (const enemy of enemies) {
   }
 }
 
-// 코어 시트의 첫 칸만 정적으로 표시합니다. 회전·부유 재생은 이후 단계입니다.
-const ex = energy.x + energy.size / 2, ey = energy.y + energy.size / 2;
-glow(ex, ey, 40, "rgba(166,255,86,0.13)");
-ctx.strokeStyle = "#b4ec7455";
-ctx.beginPath(); ctx.ellipse(ex, ey + 19, 17, 5, 0, 0, Math.PI * 2); ctx.stroke();
-if (energyImage.naturalWidth > 0) {
-  ctx.drawImage(energyImage, 0, 0, energyImage.naturalWidth / 2, energyImage.naturalHeight / 2,
-    ex - 27, ey - 27, 54, 54);
-} else {
-  circle(ex, ey, 8, "#baff75");
+// 현재 구역과 인접 구역에 생성된 코어만 그립니다. 획득 기능은 아직 없습니다.
+for (const core of visibleCores) {
+  const ex = core.x, ey = core.y;
+  if (ex < camera.x - 40 || ex > camera.x + 840 || ey < camera.y + 59 || ey > camera.y + 567) continue;
+  glow(ex, ey, 40, "rgba(166,255,86,0.13)");
+  ctx.strokeStyle = "#b4ec7455";
+  ctx.beginPath(); ctx.ellipse(ex, ey + 19, 17, 5, 0, 0, Math.PI * 2); ctx.stroke();
+  if (energyImage.naturalWidth > 0) {
+    ctx.drawImage(energyImage, 0, 0, energyImage.naturalWidth / 2, energyImage.naturalHeight / 2,
+      ex - 27, ey - 27, 54, 54);
+  } else circle(ex, ey, 8, "#baff75");
 }
 // 먼지와 빛 입자를 고정 좌표에 그립니다.
 for(let i=0;i<32;i++) {
@@ -162,7 +189,7 @@ for(let i=0;i<32;i++) {
 // 주변을 약하게 어둡게 해 중앙을 강조합니다.
 const vignette=ctx.createRadialGradient(camera.x+400,camera.y+310,140,camera.x+400,camera.y+310,440);
 vignette.addColorStop(0,"#00000000");vignette.addColorStop(1,"#00000035");
-ctx.fillStyle=vignette;ctx.fillRect(camera.x,camera.y+100,800,425);
+ctx.fillStyle=vignette;ctx.fillRect(camera.x,camera.y+99,800,428);
 
 // 저해상도 월드를 두 배로 확대합니다. HUD는 화면에 고정합니다.
 ctx.restore();
@@ -184,7 +211,7 @@ for(let i=0;i<3;i++) {
   polygon([[667+i*34,42],[693+i*34,42],[689+i*34,58],[663+i*34,58]],"#83c6a0");
 }
 label("FIELD STATUS",25,550,9,"#60777e");
-label("적 03",130,550,11,"#f49aaf");label("에너지 +10",205,550,11,"#bddc8e");
+label("DRONE " + enemies.filter(e => e.active).length,130,550,11,"#f49aaf");label("에너지 +10",205,550,11,"#bddc8e");
 label("체력 3 · 피격 후 1초 무적",310,550,11,"#9bafae");
 ctx.textAlign="right";label("OPEN WORLD / INPUT DEMO",775,550,9,"#738a91");ctx.textAlign="left";
 label("방향키로 탐색 · 충돌·점수·체력 기능은 아직 구현하지 않았습니다",25,581,11,"#778b94");
@@ -192,24 +219,71 @@ ctx.textAlign="right";label("VIEW 800 × 600",775,581,9,"#778b94");ctx.textAlign
 
 }
 
-// 드론도 월드 좌표로 이동합니다. 카메라 밖으로 완전히 나가면 반대편 바깥에 재배치합니다.
+// 드론은 완전히 보이지 않는 바깥쪽에서 생성하고 플레이어 주변을 향해 진입합니다.
+function spawnDrone(enemy) {
+  const margin = 75;
+  const side = Math.floor(Math.random() * 4);
+  if (side === 0 || side === 1) {
+    enemy.x = camera.x + (side === 0 ? -margin : canvas.width + margin);
+    enemy.y = camera.y + 99 + Math.random() * 428;
+  } else {
+    enemy.x = camera.x + Math.random() * canvas.width;
+    enemy.y = camera.y + (side === 2 ? 99 - margin : 527 + margin);
+  }
+  const targetX = player.x + player.size / 2 + (Math.random() - 0.5) * 200;
+  const targetY = player.y + player.size / 2 + (Math.random() - 0.5) * 140;
+  const dx = targetX - enemy.x, dy = targetY - enemy.y;
+  const distance = Math.hypot(dx, dy) || 1;
+  const speed = 0.8 + Math.random() * 0.25;
+  enemy.vx = dx / distance * speed;
+  enemy.vy = dy / distance * speed;
+  enemy.active = true;
+}
 function updateDrones() {
-  const half = droneSize.width / 2;
-  const minX = camera.x - half;
-  const maxX = camera.x + canvas.width + half;
-  const minY = camera.y + 99 - half;
-  const maxY = camera.y + 527 + half;
-  const spanX = maxX - minX;
-  const spanY = maxY - minY;
   for (const enemy of enemies) {
-    enemy.x = enemy.x + enemy.vx * droneSpeed;
-    enemy.y = enemy.y + enemy.vy * droneSpeed;
-    if (enemy.x > maxX || enemy.x < minX) {
-      enemy.x = ((enemy.x - minX) % spanX + spanX) % spanX + minX;
+    if (!enemy.active) {
+      if (enemy.spawnDelay > 0) { enemy.spawnDelay--; continue; }
+      spawnDrone(enemy);
     }
-    if (enemy.y > maxY || enemy.y < minY) {
-      enemy.y = ((enemy.y - minY) % spanY + spanY) % spanY + minY;
+    enemy.x += enemy.vx * droneSpeed;
+    enemy.y += enemy.vy * droneSpeed;
+    // 충분히 멀어진 적은 즉시 순간이동시키지 않고 잠시 뒤 새로 진입시킵니다.
+    if (enemy.x < camera.x - 180 || enemy.x > camera.x + 980 ||
+        enemy.y < camera.y - 81 || enemy.y > camera.y + 707) {
+      enemy.active = false;
+      enemy.spawnDelay = 45 + Math.floor(Math.random() * 90);
     }
+  }
+}
+
+// 구역 첫 방문 때 난수로 생성합니다. 유지 중인 구역에서는 위치가 흔들리지 않습니다.
+function updateMapItems() {
+  const minX = Math.floor(camera.x / mapChunkSize) - 1;
+  const maxX = Math.floor((camera.x + 800) / mapChunkSize) + 1;
+  const minY = Math.floor((camera.y + 99) / mapChunkSize) - 1;
+  const maxY = Math.floor((camera.y + 527) / mapChunkSize) + 1;
+  const activeKeys = new Set();
+  visibleCores = [];
+  for (let cy = minY; cy <= maxY; cy++) {
+    for (let cx = minX; cx <= maxX; cx++) {
+      const key = cx + ":" + cy;
+      activeKeys.add(key);
+      if (!itemChunks.has(key)) {
+        const cores = [];
+        for (let i = 0; i < 2; i++) {
+          // 두 코어는 구역의 서로 다른 절반에서 무작위 위치를 고릅니다.
+          cores.push({ x: cx * mapChunkSize + 50 + i * 320 + Math.random() * 220,
+            y: cy * mapChunkSize + 60 + Math.random() * 520 });
+        }
+        itemChunks.set(key, cores);
+      }
+      visibleCores.push(...itemChunks.get(key));
+    }
+  }
+  // 장시간 탐색해도 메모리가 계속 늘지 않도록 먼 구역의 기록을 정리합니다.
+  for (const key of itemChunks.keys()) {
+    if (itemChunks.size <= 128) break;
+    if (!activeKeys.has(key)) itemChunks.delete(key);
   }
 }
 
@@ -222,8 +296,9 @@ function gameLoop(timestamp) {
   // ② 계산: 드론 위치와 표시할 모션 프레임을 갱신합니다.
   updatePlayer();
   updateCamera();
+  updateMapItems();
   updateDrones();
-  walkFrame = player.moving ? 1 + Math.floor(timestamp / 140) % 2 : 0;
+  walkFrame = player.moving ? Math.floor(timestamp / 180) % 2 : 0;
   motionFrame = Math.floor(timestamp / 160) % 3;
 
   // ③ 그리기: 배경, 캐릭터, 아이템, HUD를 다시 그립니다.
