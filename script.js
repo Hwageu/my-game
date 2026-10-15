@@ -3,11 +3,11 @@ const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
 // 위치와 크기: 사각형은 왼쪽 위, 원은 중심 좌표입니다.
-const player = { x: 384, y: 284, size: 32, color: "#31e8ff" };
+const player = { x: 384, y: 284, size: 60, color: "#31ffa6" };
 const enemies = [
   { x: 180, y: 180, radius: 20 },
   { x: 640, y: 200, radius: 20 },
-  { x: 550, y: 450, radius: 20 }
+  { x: 650, y: 450, radius: 20 }
 ];
 const energy = { x: 240, y: 400, size: 16 };
 
