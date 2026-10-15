@@ -43,3 +43,9 @@ HTML은 같은 폴더의 `style.css`와 `script.js`를 상대 경로로 연결�
 
 변경 → 로컬 확인 → 의미 있는 메시지로 커밋 → main 푸시 → 배포 주소 확인.
 GitHub Pages 설정: Deploy from a branch / main / (root).
+
+## 배경 이미지
+
+- `assets/floor-tile.jpg`: 이 프로젝트를 위해 OpenAI 이미지 생성 도구로 제작한 반복용 SF 금속 바닥입니다. 외부 게임의 이미지나 스크린샷을 사용하지 않았습니다. 원본을 웹용 JPEG로 인코딩했습니다.
+- `Image.onload`에서 이미지를 불러온 뒤 반사 타일을 만들고, Canvas의 `createPattern(..., "repeat")`으로 가로·세로 반복합니다. 반사 배치로 타일 양쪽 경계를 연결합니다.
+- 3주차에는 반복 배경을 정적으로 표시합니다. 실제 스크롤과 월드 좌표·카메라 추적은 이후 주차에 구현합니다.
