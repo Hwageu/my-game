@@ -5,12 +5,15 @@ const worldCanvas = document.createElement("canvas");
 worldCanvas.width = 400; worldCanvas.height = 300;
 const worldCtx = worldCanvas.getContext("2d");
 let ctx = worldCtx;
-const player = { x: 377, y: 292, size: 46, color: "#31ffa6", spriteWidth: 58, spriteHeight: 80 };
+const player = { x: 377, y: 292, size: 46, color: "#31ffa6", spriteWidth: 90, spriteHeight: 90, direction: 0, moving: false };
 // 직접 튜닝할 값: 한 프레임의 기준 이동량입니다. 1, 3, 5 등을 비교해 보세요.
 let droneSpeed = 1;
 // 직접 튜닝할 플레이어 속도입니다. 드론 속도와 별개입니다.
-let playerSpeed = 3;
+let playerSpeed = 2;
 const keys = {};
+// camera는 월드에서 화면 왼쪽 위가 가리키는 위치입니다.
+const camera = { x: 0, y: 0 };
+let walkFrame = 0;
 const enemies = [
   { x: 210, y: 220, vx: 0.8, vy: 0.55, radius: 20 },
   { x: 610, y: 245, vx: -0.65, vy: 0.8, radius: 20 },
@@ -60,7 +63,7 @@ function finishImageLoad() {
 }
 for (const [image, path] of [
   [floorImage, "assets/floor-tile.jpg"],
-  [survivorImage, "assets/survivor.png"],
+  [survivorImage, "assets/survivor-directions.png"],
   [droneImage, "assets/drone-directions.png"],
   [energyImage, "assets/energy-core.png"]
 ]) {
@@ -77,6 +80,8 @@ ctx.imageSmoothingEnabled = false;
 ctx.fillStyle = "#17232b"; ctx.fillRect(0, 0, 800, 600);
 ctx.save();
 ctx.beginPath(); ctx.rect(0, 99, 800, 428); ctx.clip();
+// 바깥은 화면 좌표로 자르고, 안쪽 장면은 월드 좌표로 그립니다.
+ctx.translate(-camera.x, -camera.y);
 if (floorImage.complete && floorImage.naturalWidth > 0) {
   // 패턴은 첫 프레임에 한 번만 만들어 재사용합니다.
   if (!floorPattern) {
@@ -94,24 +99,26 @@ if (floorImage.complete && floorImage.naturalWidth > 0) {
       tileCtx.restore();
     }
   }
-  // repeat 패턴으로 가로·세로 모두 반복합니다. 아직 배경 이동은 없습니다.
+  // repeat 패턴으로 가로·세로 모두 반복합니다. 월드 좌표 원점을 기준으로 반복합니다.
   floorPattern = ctx.createPattern(tile, "repeat");
   }
   ctx.fillStyle = floorPattern;
-  ctx.fillRect(0, 99, 800, 428);
+  ctx.fillRect(camera.x, camera.y + 99, 800, 428);
   ctx.fillStyle = "rgba(5,17,24,0.28)"; ctx.fillRect(0, 99, 800, 428);
 } else {
   label("배경 이미지를 불러오지 못했습니다", 24, 130, 12);
 }
-glow(400,310,270,"rgba(31,128,129,0.12)");
+glow(camera.x + 400,camera.y + 310,270,"rgba(31,128,129,0.12)");
 // 생존자: 투명 이미지의 바깥 여백을 제외하고 몸체를 그립니다.
 const px = player.x + player.size / 2, py = player.y + player.size / 2;
 glow(px, py + 10, 65, "rgba(38,255,174,0.12)");
 ctx.fillStyle = "#00000065";
 ctx.beginPath(); ctx.ellipse(px + 4, py + 30, 25, 10, -0.15, 0, Math.PI * 2); ctx.fill();
 if (survivorImage.naturalWidth > 0) {
-  // 원본의 투명 여백만 제외합니다. 조명과 색상은 원본 그대로 사용합니다.
-  ctx.drawImage(survivorImage, 330, 210, 620, 810,
+  // 행은 아래·왼쪽·오른쪽·위, 열은 대기·걷기 A·걷기 B입니다.
+  const cellWidth = survivorImage.naturalWidth / 3;
+  const cellHeight = survivorImage.naturalHeight / 4;
+  ctx.drawImage(survivorImage, walkFrame * cellWidth, player.direction * cellHeight, cellWidth, cellHeight,
     px - player.spriteWidth / 2, py - player.spriteHeight / 2,
     player.spriteWidth, player.spriteHeight);
 } else {
@@ -149,13 +156,13 @@ if (energyImage.naturalWidth > 0) {
 }
 // 먼지와 빛 입자를 고정 좌표에 그립니다.
 for(let i=0;i<32;i++) {
-  const x=60+(i*137)%680,y=170+(i*71)%300;
+  const x=camera.x+60+(i*137)%680,y=camera.y+170+(i*71)%300;
   ctx.fillStyle=i%3===0?"#b8e3d750":"#b6c7ce18";ctx.fillRect(x,y,1,i%4===0?3:1);
 }
 // 주변을 약하게 어둡게 해 중앙을 강조합니다.
-const vignette=ctx.createRadialGradient(400,310,140,400,310,440);
+const vignette=ctx.createRadialGradient(camera.x+400,camera.y+310,140,camera.x+400,camera.y+310,440);
 vignette.addColorStop(0,"#00000000");vignette.addColorStop(1,"#00000035");
-ctx.fillStyle=vignette;ctx.fillRect(0,100,800,425);
+ctx.fillStyle=vignette;ctx.fillRect(camera.x,camera.y+100,800,425);
 
 // 저해상도 월드를 두 배로 확대합니다. HUD는 화면에 고정합니다.
 ctx.restore();
@@ -179,26 +186,26 @@ for(let i=0;i<3;i++) {
 label("FIELD STATUS",25,550,9,"#60777e");
 label("적 03",130,550,11,"#f49aaf");label("에너지 +10",205,550,11,"#bddc8e");
 label("체력 3 · 피격 후 1초 무적",310,550,11,"#9bafae");
-ctx.textAlign="right";label("DRONE PATROL / LOOP DEMO",775,550,9,"#738a91");ctx.textAlign="left";
-label("방식 B 비교 실습 · 방향키로 이동 / 충돌 판정 없음",25,581,11,"#778b94");
+ctx.textAlign="right";label("OPEN WORLD / INPUT DEMO",775,550,9,"#738a91");ctx.textAlign="left";
+label("방향키로 탐색 · 충돌·점수·체력 기능은 아직 구현하지 않았습니다",25,581,11,"#778b94");
 ctx.textAlign="right";label("VIEW 800 × 600",775,581,9,"#778b94");ctx.textAlign="left";
 
 }
 
-// 화면 가장자리는 벽이 아닙니다. 완전히 나간 드론을 반대편 바깥에서 다시 표시합니다.
-// 넓은 월드의 실제 좌표·카메라 추적은 5주차에 연결합니다.
+// 드론도 월드 좌표로 이동합니다. 카메라 밖으로 완전히 나가면 반대편 바깥에 재배치합니다.
 function updateDrones() {
   const half = droneSize.width / 2;
-  const spanX = canvas.width + half * 2;
-  const minY = 99 - half;
-  const maxY = 527 + half;
+  const minX = camera.x - half;
+  const maxX = camera.x + canvas.width + half;
+  const minY = camera.y + 99 - half;
+  const maxY = camera.y + 527 + half;
+  const spanX = maxX - minX;
   const spanY = maxY - minY;
   for (const enemy of enemies) {
     enemy.x = enemy.x + enemy.vx * droneSpeed;
     enemy.y = enemy.y + enemy.vy * droneSpeed;
-    // 스프라이트 전체가 화면 밖으로 나간 후 위치만 옮깁니다. 속도·방향은 유지합니다.
-    if (enemy.x > canvas.width + half || enemy.x < -half) {
-      enemy.x = ((enemy.x + half) % spanX + spanX) % spanX - half;
+    if (enemy.x > maxX || enemy.x < minX) {
+      enemy.x = ((enemy.x - minX) % spanX + spanX) % spanX + minX;
     }
     if (enemy.y > maxY || enemy.y < minY) {
       enemy.y = ((enemy.y - minY) % spanY + spanY) % spanY + minY;
@@ -214,7 +221,9 @@ function gameLoop(timestamp) {
 
   // ② 계산: 드론 위치와 표시할 모션 프레임을 갱신합니다.
   updatePlayer();
+  updateCamera();
   updateDrones();
+  walkFrame = player.moving ? 1 + Math.floor(timestamp / 140) % 2 : 0;
   motionFrame = Math.floor(timestamp / 160) % 3;
 
   // ③ 그리기: 배경, 캐릭터, 아이템, HUD를 다시 그립니다.
@@ -262,12 +271,17 @@ function updatePlayer() {
     player.x = player.x + moveX / length * playerSpeed;
     player.y = player.y + moveY / length * playerSpeed;
   }
-  // Step 3 비교 실습용: 캐릭터 전체가 보이도록 화면 안에 둡니다.
-  // 넓은 월드·카메라를 연결하는 Step 6에서 이 제한은 제거합니다.
-  const minX = (player.spriteWidth - player.size) / 2;
-  const maxX = canvas.width - (player.spriteWidth + player.size) / 2;
-  const minY = 99 + (player.spriteHeight - player.size) / 2;
-  const maxY = 527 - (player.spriteHeight + player.size) / 2;
-  player.x = Math.max(minX, Math.min(maxX, player.x));
-  player.y = Math.max(minY, Math.min(maxY, player.y));
+  player.moving = length > 0;
+  // 마지막 방향을 유지하므로 손을 떼어도 대기 자세가 같은 방향을 바라봅니다.
+  if (moveY < 0) player.direction = 3;
+  else if (moveY > 0) player.direction = 0;
+  else if (moveX < 0) player.direction = 1;
+  else if (moveX > 0) player.direction = 2;
+  // 월드 이동에는 화면 크기를 기준으로 한 벽이나 제한을 두지 않습니다.
+}
+
+function updateCamera() {
+  // 플레이어를 HUD 아래의 게임 영역 중앙에 유지합니다.
+  camera.x = Math.round(player.x + player.size / 2 - canvas.width / 2);
+  camera.y = Math.round(player.y + player.size / 2 - (99 + 428 / 2));
 }
