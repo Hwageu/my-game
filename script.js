@@ -14,6 +14,8 @@ const keys = {};
 // camera는 월드에서 화면 왼쪽 위가 가리키는 위치입니다.
 const camera = { x: 0, y: 0 };
 let walkFrame = 0;
+let sideWalkFrame = 0;
+const sideWalkFrameMs = 320; // 좌우 보행은 한 자세를 더 오래 표시합니다.
 const sideWalkFrames = [{"x":224,"y":64,"w":512,"h":747},{"x":1016,"y":81,"w":545,"h":723}];
 // 균등 분할 대신 실제 그림 경계를 사용해 다음 행의 머리가 섞이지 않게 합니다.
 const idleFrames = [
@@ -99,7 +101,7 @@ for (const [image, path] of [
 
 // 좌우 보행은 양발이 교차하는 전신 스프라이트만 사용합니다.
 function drawSideWalk(px, py) {
-  const frame = sideWalkFrames[walkFrame];
+  const frame = sideWalkFrames[sideWalkFrame];
   const height = 76;
   const width = frame.w * height / frame.h;
   ctx.save();
@@ -320,6 +322,7 @@ function gameLoop(timestamp) {
   updateMapItems();
   updateDrones();
   walkFrame = player.moving ? Math.floor(timestamp / 180) % 2 : 0;
+  sideWalkFrame = player.moving ? Math.floor(timestamp / sideWalkFrameMs) % 2 : 0;
   motionFrame = Math.floor(timestamp / 160) % 3;
 
   // ③ 그리기: 배경, 캐릭터, 아이템, HUD를 다시 그립니다.
