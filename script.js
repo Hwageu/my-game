@@ -1,30 +1,61 @@
-// HTML에서 id가 game인 도화지를 찾습니다.
+// 도화지를 찾고, 2D 그림을 그릴 붓을 가져옵니다.
 const canvas = document.getElementById("game");
-// 도화지에 평면 그림을 그릴 붓을 가져옵니다.
 const ctx = canvas.getContext("2d");
 
-// 붓의 색을 빨간색으로 정합니다.
-ctx.fillStyle = "red";
-// 왼쪽 위 (0, 0)에 가로 50, 세로 50 사각형을 그립니다.
-ctx.fillRect(0, 0, 50, 50);
-// 붓의 색을 노란색으로 정합니다.
-ctx.fillStyle = "yellow";
-// 오른쪽 위 (750, 0)에 가로 50, 세로 50 사각형을 그립니다.
-ctx.fillRect(750, 0, 50, 50);
-// 붓의 색을 초록색으로 정합니다.
-ctx.fillStyle = "green";
-// 왼쪽 아래 (0, 550)에 가로 50, 세로 50 사각형을 그립니다.
-ctx.fillRect(0, 550, 50, 50);
-// 붓의 색을 흰색으로 정합니다.
-ctx.fillStyle = "white";
-// 직접 수정할 줄: 순서는 x, y, 가로, 세로입니다.
-ctx.fillRect(500, 100, 90, 50);
+// 위치와 크기: 사각형은 왼쪽 위, 원은 중심 좌표입니다.
+const player = { x: 384, y: 284, size: 32, color: "#31e8ff" };
+const enemies = [
+  { x: 180, y: 180, radius: 20 },
+  { x: 640, y: 200, radius: 20 },
+  { x: 550, y: 450, radius: 20 }
+];
+const energy = { x: 240, y: 400, size: 16 };
 
-// 좌표 설명을 흰색 글자와 16px 크기로 씁니다.
+// 어두운 남색에서 보라색으로 이어지는 네온 경기장 배경입니다.
+const background = ctx.createLinearGradient(0, 0, 800, 600);
+background.addColorStop(0, "#071626");
+background.addColorStop(1, "#21102e");
+ctx.fillStyle = background;
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+// 반투명 격자를 겹쳐 가상 공간의 분위기를 만듭니다.
+ctx.strokeStyle = "rgba(49, 232, 255, 0.12)";
+ctx.lineWidth = 1;
+for (let x = 0; x <= 800; x += 40) {
+  ctx.beginPath();
+  ctx.moveTo(x, 0);
+  ctx.lineTo(x, 600);
+  ctx.stroke();
+}
+for (let y = 0; y <= 600; y += 40) {
+  ctx.beginPath();
+  ctx.moveTo(0, y);
+  ctx.lineTo(800, y);
+  ctx.stroke();
+}
+
+// 플레이어: 중앙의 청록색 사각형입니다.
+ctx.fillStyle = player.color;
+ctx.fillRect(player.x, player.y, player.size, player.size);
+
+// 적: 서로 떨어진 위치의 분홍색 원 세 개입니다.
+ctx.fillStyle = "#ff4b88";
+for (const enemy of enemies) {
+  ctx.beginPath();
+  ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// 에너지 아이템: 초록색 사각형입니다. 획득 기능은 이후 구현합니다.
+ctx.fillStyle = "#9dff65";
+ctx.fillRect(energy.x, energy.y, energy.size, energy.size);
+
+// 제목과 상태를 표시합니다. 현재는 움직이지 않는 첫 화면입니다.
 ctx.fillStyle = "white";
+ctx.font = "bold 26px sans-serif";
+ctx.fillText("NEON SURVIVOR", 24, 42);
+ctx.font = "18px sans-serif";
+ctx.fillText("생존 시간: 0초   점수: 0", 24, 76);
+ctx.fillText("체력: 3 / 3", 650, 42);
 ctx.font = "16px sans-serif";
-// 각 사각형 옆의 도화지 안쪽에 좌표를 표시합니다.
-ctx.fillText("(0, 0)", 60, 30);
-ctx.fillText("(750, 0)", 650, 30);
-ctx.fillText("(0, 550)", 60, 580);
-ctx.fillText("(400, 300)", 430, 315);
+ctx.fillText("첫 화면 미리보기 · 이동과 충돌은 아직 구현하지 않았습니다", 24, 570);
