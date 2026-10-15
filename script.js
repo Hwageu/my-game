@@ -177,7 +177,7 @@ label("FIELD STATUS",25,550,9,"#60777e");
 label("적 03",130,550,11,"#f49aaf");label("에너지 +10",205,550,11,"#bddc8e");
 label("체력 3 · 피격 후 1초 무적",310,550,11,"#9bafae");
 ctx.textAlign="right";label("DRONE PATROL / LOOP DEMO",775,550,9,"#738a91");ctx.textAlign="left";
-label("드론 이동 실습 · 방향키 조작과 충돌은 아직 구현하지 않았습니다",25,581,11,"#778b94");
+label("방식 A 비교 실습 · 방향키 입력마다 이동 / 충돌 판정 없음",25,581,11,"#778b94");
 ctx.textAlign="right";label("VIEW 800 × 600",775,581,9,"#778b94");ctx.textAlign="left";
 
 }
@@ -219,3 +219,19 @@ function gameLoop(timestamp) {
   // ④ 다음 프레임 예약: 루프는 이 한 곳에서만 반복합니다.
   requestAnimationFrame(gameLoop);
 }
+
+// 5장 Step 1~2: 키 이름 확인과 방식 A 비교 실험입니다.
+// 위치를 이벤트에서 직접 바꾸므로 키보드 자동 반복 설정에 영향을 받습니다.
+const inputStep = 5;
+document.addEventListener("keydown", function (e) {
+  console.log(e.key); // Step 1 입력 확인용. 방식 B로 전환할 때 제거합니다.
+  if (e.key === "ArrowLeft") {
+    player.x = player.x - inputStep;
+  } else if (e.key === "ArrowRight") {
+    player.x = player.x + inputStep;
+  } else if (e.key === "ArrowUp") {
+    player.y = player.y - inputStep;
+  } else if (e.key === "ArrowDown") {
+    player.y = player.y + inputStep;
+  }
+});
