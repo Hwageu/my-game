@@ -32,55 +32,38 @@ function glow(x, y, radius, color) {
   ctx.fillStyle = light; ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
 }
 
-// 금속 바닥의 윗면과 옆면 색을 달리해 깊이를 표현합니다.
+// 넓은 월드의 일부를 보여주는 정적 구도입니다. 아직 카메라 이동은 구현하지 않습니다.
 ctx.fillStyle = "#060a10"; ctx.fillRect(0, 0, 800, 600);
-polygon([[34,136],[766,136],[786,508],[14,508]], "#03070b");
-polygon([[34,119],[766,119],[786,490],[14,490]], "#17222a", "#40505a");
 ctx.save();
-ctx.beginPath(); ctx.moveTo(36,121); ctx.lineTo(764,121); ctx.lineTo(782,488); ctx.lineTo(18,488); ctx.closePath(); ctx.clip();
-// 바닥 타일마다 미묘하게 다른 금속색을 적용합니다.
-for (let row = 0; row < 7; row++) {
-  for (let col = 0; col < 12; col++) {
-    const x = col * 70 - (row % 2) * 35;
-    const y = 122 + row * 60;
-    const shade = 28 + (col * 7 + row * 3) % 10;
+ctx.beginPath(); ctx.rect(0, 99, 800, 428); ctx.clip();
+// 화면 끝에서 잘리는 타일과 도로가 바깥으로 이어지는 공간을 표현합니다.
+for (let row = -1; row < 9; row++) {
+  for (let col = -1; col < 13; col++) {
+    const x = col * 80 - (row % 2) * 40;
+    const y = 82 + row * 64;
+    const shade = 27 + ((col + 2) * 7 + (row + 2) * 3) % 9;
     ctx.fillStyle = `rgb(${shade},${shade + 9},${shade + 16})`;
-    ctx.fillRect(x + 1, y + 1, 68, 58);
-    line(x + 3, y + 2, x + 66, y + 2, "#33414a");
+    ctx.fillRect(x + 1, y + 1, 78, 62);
+    line(x + 3, y + 2, x + 76, y + 2, "#35434b");
     ctx.fillStyle = "#0c141b"; ctx.fillRect(x + 6, y + 7, 2, 2);
-    // 細かな擦り傷も固定配置で描き、再読み込みで絵が変わらないようにします。
-    line(x + 13, y + 42, x + 25 + col % 9, y + 39, "#ffffff06");
+    line(x + 13, y + 42, x + 36, y + 39, "#ffffff07");
   }
 }
-// 고정된 작은 흠집으로 표면 질감을 만듭니다.
-circle(400, 310, 120, null, "#62717a20");
-circle(400, 310, 110, null, "#62717a14");
-line(265,310,535,310,"#62717a12"); line(400,175,400,445,"#62717a12");
-label("SECTOR", 350, 280, 11, "#82939d22", "bold");
-label("07", 337, 349, 88, "#82939d14", "bold");
-// 바닥 중앙에 닳은 구역 표식을 그립니다.
-for (let x = 68; x < 745; x += 80) {
-  ctx.fillStyle = "#050b0f"; ctx.fillRect(x, 142, 43, 9);
-  ctx.fillStyle = "#49b8b2"; ctx.fillRect(x + 3, 145, 37, 2);
-  line(x,475,x+30,475,"#6f8490",2);
+// 위아래로 뻗은 정비 도로와 화면 밖으로 이어지는 배선 홈입니다.
+ctx.fillStyle = "#0b151b55"; ctx.fillRect(70, 99, 96, 428);
+line(70,99,70,527,"#78867b24"); line(166,99,166,527,"#78867b24");
+for(let y=60;y<560;y+=64) {
+  ctx.fillStyle="#9d966245";ctx.fillRect(114,y,4,25);
 }
-for (let i = 0; i < 8; i++) polygon([[50+i*12,167],[57+i*12,167],[47+i*12,179],[40+i*12,179]],"#ad855447");
+for(const y of [175,465]) {
+  line(0,y,800,y,"#081117",5); line(0,y-3,800,y-3,"#53606944");
+  for(let x=-20;x<820;x+=100) line(x,y,x+35,y,"#61c0b54d",2);
+}
+circle(400,310,120,null,"#62717a20"); circle(400,310,110,null,"#62717a14");
+label("SECTOR",350,280,11,"#82939d22","bold");
+label("07",337,349,88,"#82939d14","bold");
 glow(400,300,280,"rgba(34,114,122,0.13)");
-ctx.restore();
-
-// 바닥 유도등과 경고 줄무늬입니다.
-polygon([[34,115],[766,115],[754,131],[46,131]],"#33434d","#55616a");
-polygon([[14,491],[786,491],[771,511],[29,511]],"#101820","#34454e");
-for (let y = 160; y < 470; y += 54) {
-  polygon([[23,y],[42,y],[39,y+31],[20,y+31]],"#283842","#43525c");
-  polygon([[758,y],[777,y],[780,y+31],[761,y+31]],"#283842","#43525c");
-  line(29,y+7,28,y+23,"#71cec2",2); line(771,y+7,772,y+23,"#71cec2",2);
-}
-for (const x of [85,690]) {
-  ctx.fillStyle = "#060b10"; ctx.fillRect(x,112,26,24);
-  for(let i=0;i<4;i++) line(x+5,116+i*4,x+21,116+i*4,"#4d5b64",2);
-}
-// 두꺼운 벽과 조명을 바닥 둘레에 겹칩니다.
+// 장식용 장비를 일부에 배치하며, 주변을 벽으로 둘러싸지 않습니다.
 function equipment(x,y,w,h) {
   ctx.fillStyle = "#00000050"; ctx.fillRect(x+6,y+8,w,h);
   polygon([[x,y],[x+w-6,y],[x+w,y+6],[x+w,y+h],[x,y+h]],"#1c2b35","#50606a");
@@ -89,10 +72,10 @@ function equipment(x,y,w,h) {
   line(x+9,y+h-8,x+w-10,y+h-8,"#3d535d");
   ctx.fillStyle = "#74b9b1"; ctx.fillRect(x+w-13,y+21,4,4);
 }
-equipment(69,394,48,56); equipment(126,425,37,30); equipment(681,178,49,45);
-label("NORTH / 01",352,155,9,"#8ba1ac69");
+equipment(-18,350,48,56); equipment(738,500,65,45); equipment(681,178,49,45);
+label("NORTH ↑",365,131,9,"#8ba1ac69");
 
-// 환경 장식용 장비 상자입니다. 충돌 물체는 아닙니다.
+// 생존자: 다리, 어깨 장갑, 몸통과 헬멧을 겹쳐 그립니다.
 const px = player.x + player.size / 2, py = player.y + player.size / 2;
 glow(px,py+9,64,"rgba(38,255,174,0.15)");
 ctx.save(); ctx.translate(px,py);
@@ -110,7 +93,7 @@ line(-12,-12,10,-13,player.color,3);line(-5,7,5,7,player.color,2);ctx.restore();
 line(-15,20,-7,20,"#9cbaae",2);line(8,20,15,20,"#9cbaae",2);
 ctx.restore();
 
-// 생존자: 다리, 어깨 장갑, 몸통, 헬멧을 차례로 겹칩니다.
+// 적: 기계 날개와 붉은 렌즈를 가진 드론입니다.
 for (const enemy of enemies) {
   ctx.save();ctx.translate(enemy.x,enemy.y);
   ctx.fillStyle="#00000055";ctx.beginPath();ctx.ellipse(5,18,27,10,0,0,Math.PI*2);ctx.fill();
@@ -126,30 +109,31 @@ for (const enemy of enemies) {
   ctx.restore();
 }
 
-// 적: 기계 날개와 장갑, 붉은 렌즈를 가진 부유 드론입니다.
+// 코어: 떠 있는 결정과 바닥의 빛 고리입니다.
 const ex=energy.x+energy.size/2, ey=energy.y+energy.size/2;
 glow(ex,ey,48,"rgba(166,255,86,0.16)");
 ctx.strokeStyle="#b4ec7455";ctx.beginPath();ctx.ellipse(ex,ey+15,17,6,0,0,Math.PI*2);ctx.stroke();
 polygon([[ex,ey-14],[ex+10,ey],[ex,ey+13],[ex-10,ey]],"#caff85","#e9ffc8");
 polygon([[ex,ey-14],[ex,ey+13],[ex-10,ey]],"#4d9f60");
 line(ex,ey-8,ex+5,ey,"#ffffff",2);
-// 코어: 떠 있는 결정과 바닥의 빛 고리입니다.
+// 먼지와 빛 입자를 고정 좌표에 그립니다.
 for(let i=0;i<32;i++) {
   const x=60+(i*137)%680,y=170+(i*71)%300;
   ctx.fillStyle=i%3===0?"#b8e3d750":"#b6c7ce18";ctx.fillRect(x,y,1,i%4===0?3:1);
 }
-// 먼지 입자는 고정 좌표에 그립니다. 움직임은 다음 장에서 추가합니다.
+// 주변을 약하게 어둡게 해 중앙을 강조합니다.
 const vignette=ctx.createRadialGradient(400,310,140,400,310,440);
 vignette.addColorStop(0,"#00000000");vignette.addColorStop(1,"#00000065");
 ctx.fillStyle=vignette;ctx.fillRect(0,100,800,425);
 
-// 주변을 어둡게 하는 효과로 중앙의 주인공을 강조합니다.
+// 월드 그리기를 마치고 HUD는 화면 좌표에 고정합니다.
+ctx.restore();
 ctx.fillStyle="#090e15";ctx.fillRect(0,0,800,99);ctx.fillRect(0,527,800,73);
 line(24,98,776,98,"#36434b");line(24,527,776,527,"#36434b");
 label("N / S",24,29,13,"#9fddb9","bold");
 label("SURVIVAL SYSTEM     /     SECTOR 07",80,28,9,"#849695");
 label("NEON SURVIVOR",24,61,30,"#e5ebe6","bold");
-label("봉쇄된 구역에서, 끝까지 살아남으세요",26,82,11,"#8a9d9f");
+label("끝없이 이어지는 구역을 탐색하며 살아남으세요",26,82,11,"#8a9d9f");
 line(414,22,414,77,"#303a43");
 label("SCORE",438,30,9);label("0000",437,59,25,"#e9efea","bold");
 label("SURVIVAL",546,30,9);label("00:00",545,59,25,"#e9efea","bold");
@@ -160,6 +144,6 @@ for(let i=0;i<3;i++) {
 label("FIELD STATUS",25,550,9,"#60777e");
 label("적 03",130,550,11,"#f49aaf");label("에너지 +10",205,550,11,"#bddc8e");
 label("체력 3 · 피격 후 1초 무적",310,550,11,"#9bafae");
-ctx.textAlign="right";label("NEON SURVIVOR / FIRST LOOK",775,550,9,"#738a91");ctx.textAlign="left";
-label("첫 화면 미리보기 · 이동과 충돌은 이후 단계에서 구현합니다",25,581,11,"#778b94");
-ctx.textAlign="right";label("800 × 600",775,581,9,"#778b94");ctx.textAlign="left";
+ctx.textAlign="right";label("OPEN SECTOR / FIRST LOOK",775,550,9,"#738a91");ctx.textAlign="left";
+label("넓은 맵의 첫 화면 · 이동·카메라 추적은 이후 단계에서 구현합니다",25,581,11,"#778b94");
+ctx.textAlign="right";label("VIEW 800 × 600",775,581,9,"#778b94");ctx.textAlign="left";
