@@ -24,7 +24,7 @@ const enemyCountInterval = 10; // 10초마다 드론 한 대를 추가합니다.
 const maxEnemyCount = 12;
 const droneSize = { width: 82, height: 52 };
 // 충돌 실습 중에는 true, 최종 제출 때는 false로 바꿉니다.
-let showDebug = true; // 7장 실습 중 켜 두고, 최종 제출 전 false로 바꿉니다.
+let showDebug = false; // D키로 켜서 확인하고, 제출 상태에서는 꺼 둡니다.
 let showHitbox = showDebug;
 // 직접 튜닝할 플레이어 속도입니다. 드론 속도와 별개입니다.
 let playerSpeed = 2;

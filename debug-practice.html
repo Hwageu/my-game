@@ -575,7 +575,6 @@ document.addEventListener("keyup", function (e) {
   if (controlKeys.includes(e.key)) {
     e.preventDefault();
     keys[e.key] = false;
-    console.log("플레이어 위치:", player.x, player.y);
   }
 });
 function releaseKeys() {
