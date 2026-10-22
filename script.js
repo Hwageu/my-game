@@ -54,6 +54,7 @@ const maxHealth = 3;
 let health = maxHealth;
 let collectedCoreCount = 0;
 let invincibleUntil = 0;
+let lastHitTime = null;
 let startTime = null;
 let elapsedSeconds = 0;
 // 개수만 바꾸면 이동·그리기 반복문을 고치지 않아도 됩니다.
@@ -154,6 +155,7 @@ function checkEnemyCollisions(now) {
     if (enemy.active && checkCollision(body, enemyHitbox(enemy))) {
       health -= 1;
       invincibleUntil = now + 1000;
+      lastHitTime = now;
       if (health === 0) {
         gameState = "gameover";
         player.moving = false;
@@ -197,6 +199,30 @@ function drawHitboxes() {
 }
 
 // 화면 좌표로 그리므로 월드를 이동해도 같은 자리에 표시됩니다.
+function drawHitFeedback(now) {
+  if (lastHitTime === null) return;
+  const age = now - lastHitTime;
+  if (age < 0 || age >= 1000) return;
+  const x = player.x + player.size / 2;
+  const y = player.y + player.size / 2;
+  ctx.save();
+  // 반복 점멸 없이 한 번 퍼지는 피격 테두리입니다.
+  if (age < 350) {
+    ctx.globalAlpha = 1 - age / 350;
+    ctx.strokeStyle = "#ff8395";
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(x, y, 30 + age / 14, 0, Math.PI * 2); ctx.stroke();
+    label("HIT -1", x - 25, y - 50 - age / 35, 14, "#ffb2bd", "bold");
+  }
+  if (gameState === "playing") {
+    ctx.globalAlpha = 0.7 * (1 - age / 1000);
+    ctx.strokeStyle = "#8cead4";
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(x, y, 31, 44, 0, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawDebugInfo() {
   if (!showDebug) return;
   ctx = screenCtx;
@@ -312,6 +338,7 @@ vignette.addColorStop(0,"#00000000");vignette.addColorStop(1,"#00000035");
 ctx.fillStyle=vignette;ctx.fillRect(camera.x,camera.y+99,800,428);
 
 // 그림과 같은 카메라 변환 안에서 판정 영역을 그립니다.
+drawHitFeedback(Date.now());
 drawHitboxes();
 
 // 저해상도 월드를 두 배로 확대합니다. HUD는 화면에 고정합니다.
@@ -436,6 +463,7 @@ function resetGame() {
   health = maxHealth;
   collectedCoreCount = 0;
   invincibleUntil = 0;
+  lastHitTime = null;
   startTime = null;
   elapsedSeconds = 0;
   player.x = 377; player.y = 292;
