@@ -43,6 +43,13 @@ const itemChunks = new Map();
 let visibleCores = [];
 // 코어 한 개당 10점입니다.
 let score = 0;
+let gameState = "playing";
+const maxHealth = 3;
+let health = maxHealth;
+let collectedCoreCount = 0;
+let invincibleUntil = 0;
+let startTime = null;
+let elapsedSeconds = 0;
 // 개수만 바꾸면 이동·그리기 반복문을 고치지 않아도 됩니다.
 for (let i = 0; i < initialEnemyCount; i++) {
   enemies.push({
@@ -133,13 +140,21 @@ function checkCollision(a, b) {
     a.y < b.y + b.height &&
     a.y + a.height > b.y;
 }
-function checkEnemyCollisions() {
+// 무적 시간이 끝난 뒤 닿으면 한 번만 체력을 줄입니다.
+function checkEnemyCollisions(now) {
+  if (gameState !== "playing" || now < invincibleUntil) return;
   const body = playerHitbox();
   for (const enemy of enemies) {
-    const touching = enemy.active && checkCollision(body, enemyHitbox(enemy));
-    // 겹치기 시작할 때만 출력합니다. 떨어진 뒤 다시 닿으면 다시 출력합니다.
-    if (touching && !enemy.wasTouching) console.log("충돌!");
-    enemy.wasTouching = touching;
+    if (enemy.active && checkCollision(body, enemyHitbox(enemy))) {
+      health -= 1;
+      invincibleUntil = now + 1000;
+      if (health === 0) {
+        gameState = "gameover";
+        player.moving = false;
+        releaseKeys();
+      }
+      break; // 같은 순간 여러 적에게 닿아도 체력은 한 칸만 줄어듭니다.
+    }
   }
 }
 // 코어의 빛과 투명 여백을 제외한 가운데 부분으로 획득을 판정합니다.
@@ -147,11 +162,14 @@ function coreHitbox(core) {
   return { x: core.x - 14, y: core.y - 18, width: 28, height: 36 };
 }
 function collectCores() {
+  if (gameState !== "playing") return;
   const body = playerHitbox();
   for (const core of visibleCores) {
     if (!core.collected && checkCollision(body, coreHitbox(core))) {
       core.collected = true; // 다음 프레임에 같은 코어로 점수가 또 오르지 않게 합니다.
       score += 10;
+      collectedCoreCount += 1;
+      if (collectedCoreCount % 5 === 0) health = Math.min(maxHealth, health + 1);
     }
   }
   // 구역에 저장된 원본에도 획득 표시가 남아 다시 와도 되살아나지 않습니다.
@@ -290,16 +308,16 @@ label("NEON SURVIVOR",24,61,30,"#e5ebe6","bold");
 label("끝없이 이어지는 구역을 탐색하며 살아남으세요",26,82,11,"#8a9d9f");
 line(414,22,414,77,"#303a43");
 label("SCORE",438,30,9);label(String(score).padStart(4, "0"),437,59,25,"#e9efea","bold");
-label("SURVIVAL",546,30,9);label("00:00",545,59,25,"#e9efea","bold");
-label("VITALS",667,30,9);label("3 / 3",739,30,9,"#94c9a4");
+label("SURVIVAL",546,30,9);label(formatTime(elapsedSeconds),545,59,25,"#e9efea","bold");
+label("VITALS",667,30,9);label(health + " / " + maxHealth,739,30,9,"#94c9a4");
 for(let i=0;i<3;i++) {
-  polygon([[667+i*34,42],[693+i*34,42],[689+i*34,58],[663+i*34,58]],"#83c6a0");
+  polygon([[667+i*34,42],[693+i*34,42],[689+i*34,58],[663+i*34,58]],i < health ? "#83c6a0" : "#293a36");
 }
-label("FIELD STATUS",25,550,9,"#60777e");
+label(gameState === "playing" && Date.now() < invincibleUntil ? "SHIELD ACTIVE" : "FIELD STATUS",25,550,9,"#83c6a0");
 label("DRONE " + enemies.filter(e => e.active).length,130,550,11,"#f49aaf");label("에너지 +10",205,550,11,"#bddc8e");
-label("체력 3 · 피격 후 1초 무적",310,550,11,"#9bafae");
-ctx.textAlign="right";label("OPEN WORLD / INPUT DEMO",775,550,9,"#738a91");ctx.textAlign="left";
-label("방향키로 이동 · 코어 획득 +10점 · 드론 충돌은 F12 콘솔에서 확인",25,581,11,"#778b94");
+label("회복 코어 " + (collectedCoreCount % 5) + "/5 · 피격 후 1초 무적",310,550,11,"#9bafae");
+ctx.textAlign="right";label("OPEN WORLD / SURVIVAL",775,550,9,"#738a91");ctx.textAlign="left";
+label("방향키 이동 · 코어 +10점 · 5개마다 체력 회복 · 종료 후 R 재시작",25,581,11,"#778b94");
 ctx.textAlign="right";label("VIEW 800 × 600",775,581,9,"#778b94");ctx.textAlign="left";
 
 }
@@ -372,6 +390,46 @@ function updateMapItems() {
   }
 }
 
+function formatTime(seconds) {
+  return String(Math.floor(seconds / 60)).padStart(2, "0") + ":" + String(seconds % 60).padStart(2, "0");
+}
+// 새 루프를 만들지 않고, 이번 판의 값만 처음 상태로 되돌립니다.
+function resetGame() {
+  score = 0;
+  health = maxHealth;
+  collectedCoreCount = 0;
+  invincibleUntil = 0;
+  startTime = null;
+  elapsedSeconds = 0;
+  player.x = 377; player.y = 292;
+  player.direction = 0; player.moving = false;
+  walkFrame = 0; sideWalkFrame = 0; motionFrame = 0;
+  releaseKeys();
+  enemies.length = 0;
+  for (let i = 0; i < initialEnemyCount; i++) {
+    enemies.push({x: 0, y: 0, vx: 0, vy: 0, speed: 0.8 + (i % 3) * 0.125,
+      active: false, spawnDelay: i * 100});
+  }
+  itemChunks.clear();
+  visibleCores = [];
+  updateCamera();
+  updateMapItems();
+  gameState = "playing";
+}
+function drawGameOver() {
+  ctx = screenCtx;
+  ctx.save();
+  ctx.fillStyle = "rgba(3,10,16,0.86)";
+  ctx.fillRect(0,99,800,428);
+  ctx.strokeStyle = "#83c6a0"; ctx.lineWidth = 2;
+  ctx.strokeRect(170,195,460,230);
+  ctx.textAlign = "center";
+  label("GAME OVER",400,255,42,"#e5ebe6","bold");
+  label("최종 점수: " + score,400,305,22,"#bddc8e");
+  label("생존 시간: " + formatTime(elapsedSeconds),400,340,16,"#9bafae");
+  label("R 키를 눌러 다시 시작",400,390,17,"#e5ebe6");
+  ctx.restore();
+}
 function gameLoop(timestamp) {
   // ① 지우기: 화면과 저해상도 월드의 지난 프레임을 없앱니다.
   worldCtx.setTransform(1, 0, 0, 1, 0, 0);
@@ -379,18 +437,24 @@ function gameLoop(timestamp) {
   screenCtx.clearRect(0, 0, canvas.width, canvas.height);
 
   // ② 계산: 드론 위치와 표시할 모션 프레임을 갱신합니다.
-  updatePlayer();
-  updateCamera();
-  updateMapItems();
-  updateDrones();
-  checkEnemyCollisions();
-  collectCores();
-  walkFrame = player.moving ? Math.floor(timestamp / 180) % 2 : 0;
-  sideWalkFrame = player.moving ? Math.floor(timestamp / sideWalkFrameMs) % 2 : 0;
-  motionFrame = Math.floor(timestamp / 160) % 3;
+  if (gameState === "playing") {
+    const now = Date.now();
+    if (startTime === null) startTime = now;
+    elapsedSeconds = Math.max(0, Math.floor((now - startTime) / 1000));
+    updatePlayer();
+    updateCamera();
+    updateMapItems();
+    updateDrones();
+    checkEnemyCollisions(now);
+    collectCores();
+    walkFrame = player.moving ? Math.floor(timestamp / 180) % 2 : 0;
+    sideWalkFrame = player.moving ? Math.floor(timestamp / sideWalkFrameMs) % 2 : 0;
+    if (gameState === "playing") motionFrame = Math.floor(timestamp / 160) % 3;
+  }
 
   // ③ 그리기: 배경, 캐릭터, 아이템, HUD를 다시 그립니다.
   drawScene();
+  if (gameState === "gameover") drawGameOver();
 
   // ④ 다음 프레임 예약: 루프는 이 한 곳에서만 반복합니다.
   requestAnimationFrame(gameLoop);
@@ -400,6 +464,11 @@ function gameLoop(timestamp) {
 // 방식 B: 이벤트에서는 키 상태만 기록하고, 위치 계산은 루프에서 합니다.
 const controlKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "];
 document.addEventListener("keydown", function (e) {
+  if ((e.key === "r" || e.key === "R") && gameState === "gameover" && !e.repeat) {
+    e.preventDefault();
+    resetGame();
+    return;
+  }
   if (controlKeys.includes(e.key)) {
     e.preventDefault();
     keys[e.key] = true;
