@@ -56,7 +56,7 @@ const itemChunks = new Map();
 let visibleCores = [];
 // 코어 한 개당 10점입니다.
 let score = 0;
-let gameState = "playing";
+let gameState = "start";
 const maxHealth = 3;
 let health = maxHealth;
 let collectedCoreCount = 0;
@@ -88,6 +88,14 @@ let pendingImages = 6;
 // 방식 B: 이벤트에서는 키 상태만 기록하고, 위치 계산은 루프에서 합니다.
 const controlKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "];
 document.addEventListener("keydown", function (e) {
+  if (gameState === "start") {
+    // 운영체제 단축키와 보조 키만 누른 경우는 시작 입력에서 제외합니다.
+    if (e.ctrlKey || e.metaKey || e.altKey || e.repeat ||
+        ["Shift", "Control", "Alt", "Meta", "Tab", "Escape"].includes(e.key)) return;
+    e.preventDefault();
+    resetGame();
+    return;
+  }
   if ((e.key === "d" || e.key === "D") && !e.repeat) {
     e.preventDefault();
     showDebug = !showDebug;
@@ -104,6 +112,10 @@ document.addEventListener("keydown", function (e) {
     keys[e.key] = true;
   }
 });
+canvas.addEventListener("pointerdown", function () {
+  if (gameState === "start") resetGame();
+});
+
 document.addEventListener("keyup", function (e) {
   if (controlKeys.includes(e.key)) {
     e.preventDefault();
@@ -149,7 +161,11 @@ function glow(x, y, radius, color) {
 
 function finishImageLoad() {
   pendingImages -= 1;
-  if (pendingImages === 0) requestAnimationFrame(gameLoop);
+  if (pendingImages === 0) {
+    updateCamera();
+    updateMapItems();
+    requestAnimationFrame(gameLoop);
+  }
 }
 
 // 좌우 보행은 양발이 교차하는 전신 스프라이트만 사용합니다.
@@ -515,6 +531,22 @@ function resetGame() {
   updateMapItems();
   gameState = "playing";
 }
+function drawStartScreen() {
+  ctx = screenCtx;
+  ctx.save();
+  ctx.fillStyle = "rgba(3,10,16,0.88)";
+  ctx.fillRect(0,99,800,428);
+  ctx.strokeStyle = "#83c6a0"; ctx.lineWidth = 2;
+  ctx.strokeRect(90,150,620,325);
+  ctx.textAlign = "center";
+  label("NEON SURVIVOR",400,220,40,"#e5ebe6","bold");
+  label("드론을 피하고 코어를 모으며 오래 살아남으세요",400,270,17,"#bddc8e");
+  label("방향키 이동 · 코어 +10점 · 5개마다 체력 회복",400,315,14,"#9bafae");
+  label("체력 3 · 피격 후 1초 무적 · 게임 오버 후 R 재시작",400,345,13,"#9bafae");
+  label("아무 키나 누르거나 화면을 클릭해 시작",400,420,17,"#e5ebe6","bold");
+  ctx.restore();
+}
+
 function drawGameOver() {
   ctx = screenCtx;
   ctx.save();
@@ -591,6 +623,7 @@ function gameLoop(timestamp) {
 
   // ③ 그리기: 배경, 캐릭터, 아이템, HUD를 다시 그립니다.
   drawScene();
+  if (gameState === "start") drawStartScreen();
   if (gameState === "gameover") drawGameOver();
   drawDebugInfo();
 
