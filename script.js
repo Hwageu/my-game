@@ -17,7 +17,8 @@ const enemyCountInterval = 10; // 10초마다 드론 한 대를 추가합니다.
 const maxEnemyCount = 12;
 const droneSize = { width: 82, height: 52 };
 // 충돌 실습 중에는 true, 최종 제출 때는 false로 바꿉니다.
-let showHitbox = false;
+let showDebug = true; // 7장 실습 중 켜 두고, 최종 제출 전 false로 바꿉니다.
+let showHitbox = showDebug;
 // 직접 튜닝할 플레이어 속도입니다. 드론 속도와 별개입니다.
 let playerSpeed = 2;
 const keys = {};
@@ -192,6 +193,20 @@ function drawHitboxes() {
   }
   for (const core of visibleCores) boxes.push(coreHitbox(core));
   for (const box of boxes) ctx.strokeRect(box.x, box.y, box.width, box.height);
+  ctx.restore();
+}
+
+// 화면 좌표로 그리므로 월드를 이동해도 같은 자리에 표시됩니다.
+function drawDebugInfo() {
+  if (!showDebug) return;
+  ctx = screenCtx;
+  ctx.save();
+  ctx.fillStyle = "rgba(3,10,16,0.92)";
+  ctx.fillRect(12,110,340,105);
+  label("DEBUG / D키로 끄기",24,132,12,"#baff75","bold");
+  label("위치 x: " + player.x.toFixed(1) + " / y: " + player.y.toFixed(1),24,155,12,"#e5ebe6");
+  label("드론: " + enemies.filter(e => e.active).length + " / 전체: " + enemies.length,24,178,12,"#e5ebe6");
+  label("상태: " + gameState + " / 점수: " + score,24,201,12,"#e5ebe6");
   ctx.restore();
 }
 
@@ -478,6 +493,7 @@ function gameLoop(timestamp) {
   // ③ 그리기: 배경, 캐릭터, 아이템, HUD를 다시 그립니다.
   drawScene();
   if (gameState === "gameover") drawGameOver();
+  drawDebugInfo();
 
   // ④ 다음 프레임 예약: 루프는 이 한 곳에서만 반복합니다.
   requestAnimationFrame(gameLoop);
@@ -487,6 +503,12 @@ function gameLoop(timestamp) {
 // 방식 B: 이벤트에서는 키 상태만 기록하고, 위치 계산은 루프에서 합니다.
 const controlKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "];
 document.addEventListener("keydown", function (e) {
+  if ((e.key === "d" || e.key === "D") && !e.repeat) {
+    e.preventDefault();
+    showDebug = !showDebug;
+    showHitbox = showDebug;
+    return;
+  }
   if ((e.key === "r" || e.key === "R") && gameState === "gameover" && !e.repeat) {
     e.preventDefault();
     resetGame();
