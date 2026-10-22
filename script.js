@@ -13,6 +13,8 @@ const droneSpeedStep = 0.1;
 const maxDroneSpeedMultiplier = 1.8;
 // 난이도 설정: 드론 4대, 이전 기준보다 이동 속도 15% 증가.
 const initialEnemyCount = 4;
+const enemyCountInterval = 10; // 10초마다 드론 한 대를 추가합니다.
+const maxEnemyCount = 12;
 const droneSize = { width: 82, height: 52 };
 // 충돌 실습 중에는 true, 최종 제출 때는 false로 바꿉니다.
 let showHitbox = false;
@@ -350,6 +352,17 @@ function getDroneSpeedMultiplier() {
   return Math.min(maxDroneSpeedMultiplier,
     1 + Math.floor(elapsedSeconds / droneSpeedInterval) * droneSpeedStep);
 }
+function updateEnemyCount() {
+  if (gameState !== "playing") return;
+  const targetCount = Math.min(maxEnemyCount,
+    initialEnemyCount + Math.floor(elapsedSeconds / enemyCountInterval));
+  // 시간이 여러 구간 지났어도 현재 목표 수까지만 보충합니다.
+  while (enemies.length < targetCount) {
+    const index = enemies.length;
+    enemies.push({ x: 0, y: 0, vx: 0, vy: 0,
+      speed: 0.8 + (index % 3) * 0.125, active: false, spawnDelay: 0 });
+  }
+}
 function updateDrones() {
   const currentDroneSpeed = droneSpeed * getDroneSpeedMultiplier();
   for (const enemy of enemies) {
@@ -453,6 +466,7 @@ function gameLoop(timestamp) {
     updatePlayer();
     updateCamera();
     updateMapItems();
+    updateEnemyCount();
     updateDrones();
     checkEnemyCollisions(now);
     collectCores();
