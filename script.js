@@ -64,6 +64,12 @@ let invincibleUntil = 0;
 let lastHitTime = null;
 let startTime = null;
 let elapsedSeconds = 0;
+let isMuted = false;
+const soundEffects = {
+  point: makeSound("assets/point.wav", 0.45),
+  hit: makeSound("assets/hit.wav", 0.5),
+  gameover: makeSound("assets/gameover.wav", 0.45)
+};
 // 개수만 바꾸면 이동·그리기 반복문을 고치지 않아도 됩니다.
 for (let i = 0; i < initialEnemyCount; i++) {
   enemies.push({
@@ -88,6 +94,18 @@ let pendingImages = 6;
 // 방식 B: 이벤트에서는 키 상태만 기록하고, 위치 계산은 루프에서 합니다.
 const controlKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "];
 document.addEventListener("keydown", function (e) {
+  if ((e.key === "m" || e.key === "M") && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault();
+    isMuted = !isMuted;
+    for (const sound of Object.values(soundEffects)) {
+      if (!sound) continue;
+      sound.muted = isMuted;
+      if (isMuted) {
+        try { sound.pause(); sound.currentTime = 0; } catch {}
+      }
+    }
+    return;
+  }
   if (gameState === "start") {
     // 운영체제 단축키와 보조 키만 누른 경우는 시작 입력에서 제외합니다.
     if (e.ctrlKey || e.metaKey || e.altKey || e.repeat ||
@@ -131,6 +149,26 @@ document.addEventListener("visibilitychange", function () {
 
 // ===== ④. 함수들 — 계산과 화면 표시 =====
 
+
+// 소리는 한 번만 만들고 재사용합니다. 실패해도 게임은 계속 실행합니다.
+function makeSound(source, volume) {
+  try {
+    const sound = new Audio(source);
+    sound.preload = "auto";
+    sound.volume = volume;
+    sound.addEventListener("error", function () { sound.unavailable = true; });
+    return sound;
+  } catch { return null; }
+}
+function playSound(name) {
+  const sound = soundEffects[name];
+  if (isMuted || !sound || sound.unavailable) return;
+  try {
+    sound.currentTime = 0;
+    const playback = sound.play();
+    if (playback && typeof playback.catch === "function") playback.catch(() => {});
+  } catch { /* 소리 재생 실패로 게임을 멈추지 않습니다. */ }
+}
 
 // 같은 모양과 조명을 반복해서 그릴 수 있도록 작은 함수로 나눕니다.
 function polygon(points, fill, stroke) {
@@ -204,6 +242,7 @@ function checkEnemyCollisions(now) {
   for (const enemy of enemies) {
     if (enemy.active && checkCollision(body, enemyHitbox(enemy))) {
       health -= 1;
+      playSound(health === 0 ? "gameover" : "hit");
       invincibleUntil = now + 1000;
       lastHitTime = now;
       if (health === 0) {
@@ -226,6 +265,7 @@ function collectCores() {
     if (!core.collected && checkCollision(body, coreHitbox(core))) {
       core.collected = true; // 다음 프레임에 같은 코어로 점수가 또 오르지 않게 합니다.
       score += 10;
+      playSound("point");
       collectedCoreCount += 1;
       if (collectedCoreCount % 5 === 0) health = Math.min(maxHealth, health + 1);
     }
@@ -415,7 +455,7 @@ label("DRONE " + enemies.filter(e => e.active).length,130,550,11,"#f49aaf");labe
 label("회복 코어 " + (collectedCoreCount % 5) + "/5 · 피격 후 1초 무적",310,550,11,"#9bafae");
 ctx.textAlign="right";label("OPEN WORLD / SURVIVAL",775,550,9,"#738a91");ctx.textAlign="left";
 label("방향키 이동 · 코어 +10점 · 5개마다 체력 회복 · 종료 후 R 재시작",25,581,11,"#778b94");
-ctx.textAlign="right";label("VIEW 800 × 600",775,581,9,"#778b94");ctx.textAlign="left";
+ctx.textAlign="right";label(isMuted ? "SOUND OFF [M]" : "SOUND ON [M]",775,581,9,isMuted ? "#f49aaf" : "#bddc8e");ctx.textAlign="left";
 
 }
 
@@ -509,6 +549,10 @@ function formatTime(seconds) {
 }
 // 새 루프를 만들지 않고, 이번 판의 값만 처음 상태로 되돌립니다.
 function resetGame() {
+  for (const sound of Object.values(soundEffects)) {
+    if (!sound) continue;
+    try { sound.pause(); sound.currentTime = 0; } catch {}
+  }
   score = 0;
   health = maxHealth;
   collectedCoreCount = 0;
@@ -543,6 +587,7 @@ function drawStartScreen() {
   label("드론을 피하고 코어를 모으며 오래 살아남으세요",400,270,17,"#bddc8e");
   label("방향키 이동 · 코어 +10점 · 5개마다 체력 회복",400,315,14,"#9bafae");
   label("체력 3 · 피격 후 1초 무적 · 게임 오버 후 R 재시작",400,345,13,"#9bafae");
+  label("M: 음소거 켜기 / 끄기",400,377,13,"#9bafae");
   label("아무 키나 누르거나 화면을 클릭해 시작",400,420,17,"#e5ebe6","bold");
   ctx.restore();
 }
