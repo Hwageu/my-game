@@ -41,6 +41,8 @@ let floorPattern = null;
 const mapChunkSize = 640;
 const itemChunks = new Map();
 let visibleCores = [];
+// 코어 한 개당 10점입니다.
+let score = 0;
 // 개수만 바꾸면 이동·그리기 반복문을 고치지 않아도 됩니다.
 for (let i = 0; i < initialEnemyCount; i++) {
   enemies.push({
@@ -140,6 +142,22 @@ function checkEnemyCollisions() {
     enemy.wasTouching = touching;
   }
 }
+// 코어의 빛과 투명 여백을 제외한 가운데 부분으로 획득을 판정합니다.
+function coreHitbox(core) {
+  return { x: core.x - 14, y: core.y - 18, width: 28, height: 36 };
+}
+function collectCores() {
+  const body = playerHitbox();
+  for (const core of visibleCores) {
+    if (!core.collected && checkCollision(body, coreHitbox(core))) {
+      core.collected = true; // 다음 프레임에 같은 코어로 점수가 또 오르지 않게 합니다.
+      score += 10;
+    }
+  }
+  // 구역에 저장된 원본에도 획득 표시가 남아 다시 와도 되살아나지 않습니다.
+  visibleCores = visibleCores.filter(core => !core.collected);
+}
+
 function drawHitboxes() {
   if (!showHitbox) return;
   ctx.save();
@@ -149,6 +167,7 @@ function drawHitboxes() {
   for (const enemy of enemies) {
     if (enemy.active) boxes.push(enemyHitbox(enemy));
   }
+  for (const core of visibleCores) boxes.push(coreHitbox(core));
   for (const box of boxes) ctx.strokeRect(box.x, box.y, box.width, box.height);
   ctx.restore();
 }
@@ -232,7 +251,7 @@ for (const enemy of enemies) {
   }
 }
 
-// 현재 구역과 인접 구역에 생성된 코어만 그립니다. 획득 기능은 아직 없습니다.
+// 현재 구역과 인접 구역의 아직 획득하지 않은 코어만 그립니다.
 for (const core of visibleCores) {
   const ex = core.x, ey = core.y;
   if (ex < camera.x - 40 || ex > camera.x + 840 || ey < camera.y + 59 || ey > camera.y + 567) continue;
@@ -270,7 +289,7 @@ label("SURVIVAL SYSTEM     /     SECTOR 07",80,28,9,"#849695");
 label("NEON SURVIVOR",24,61,30,"#e5ebe6","bold");
 label("끝없이 이어지는 구역을 탐색하며 살아남으세요",26,82,11,"#8a9d9f");
 line(414,22,414,77,"#303a43");
-label("SCORE",438,30,9);label("0000",437,59,25,"#e9efea","bold");
+label("SCORE",438,30,9);label(String(score).padStart(4, "0"),437,59,25,"#e9efea","bold");
 label("SURVIVAL",546,30,9);label("00:00",545,59,25,"#e9efea","bold");
 label("VITALS",667,30,9);label("3 / 3",739,30,9,"#94c9a4");
 for(let i=0;i<3;i++) {
@@ -280,7 +299,7 @@ label("FIELD STATUS",25,550,9,"#60777e");
 label("DRONE " + enemies.filter(e => e.active).length,130,550,11,"#f49aaf");label("에너지 +10",205,550,11,"#bddc8e");
 label("체력 3 · 피격 후 1초 무적",310,550,11,"#9bafae");
 ctx.textAlign="right";label("OPEN WORLD / INPUT DEMO",775,550,9,"#738a91");ctx.textAlign="left";
-label("방향키로 이동 · 빨간 판정 영역이 겹치면 F12 콘솔에서 충돌 확인",25,581,11,"#778b94");
+label("방향키로 이동 · 코어 획득 +10점 · 드론 충돌은 F12 콘솔에서 확인",25,581,11,"#778b94");
 ctx.textAlign="right";label("VIEW 800 × 600",775,581,9,"#778b94");ctx.textAlign="left";
 
 }
@@ -343,7 +362,7 @@ function updateMapItems() {
         }
         itemChunks.set(key, cores);
       }
-      visibleCores.push(...itemChunks.get(key));
+      visibleCores.push(...itemChunks.get(key).filter(core => !core.collected));
     }
   }
   // 장시간 탐색해도 메모리가 계속 늘지 않도록 먼 구역의 기록을 정리합니다.
@@ -365,6 +384,7 @@ function gameLoop(timestamp) {
   updateMapItems();
   updateDrones();
   checkEnemyCollisions();
+  collectCores();
   walkFrame = player.moving ? Math.floor(timestamp / 180) % 2 : 0;
   sideWalkFrame = player.moving ? Math.floor(timestamp / sideWalkFrameMs) % 2 : 0;
   motionFrame = Math.floor(timestamp / 160) % 3;
