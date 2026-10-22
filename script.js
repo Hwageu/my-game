@@ -11,6 +11,8 @@ let droneSpeed = 1;
 // 6장 배열 실습: 3을 8로 바꾸면 같은 반복문으로 8대를 처리합니다.
 const initialEnemyCount = 3;
 const droneSize = { width: 82, height: 52 };
+// 충돌 실습 중에는 true, 최종 제출 때는 false로 바꿉니다.
+let showHitbox = true;
 // 직접 튜닝할 플레이어 속도입니다. 드론 속도와 별개입니다.
 let playerSpeed = 2;
 const keys = {};
@@ -111,6 +113,43 @@ function drawSideWalk(px, py) {
   if (player.direction === 2) ctx.scale(-1, 1);
   ctx.drawImage(survivorSideImage, frame.x, frame.y, frame.w, frame.h,
     -width / 2, -height, width, height);
+  ctx.restore();
+}
+
+// 그림의 투명 여백을 제외한 몸통을 판정합니다. 좌표는 그림과 같은 월드 좌표입니다.
+function playerHitbox() {
+  return { x: player.x + player.size / 2 - 14,
+    y: player.y + player.size / 2 - 25, width: 28, height: 58 };
+}
+function enemyHitbox(enemy) {
+  return { x: enemy.x - 24, y: enemy.y - 14, width: 48, height: 28 };
+}
+// 가로와 세로가 모두 겹쳐야 충돌입니다. 테두리만 맞닿은 상태는 제외합니다.
+function checkCollision(a, b) {
+  return a.x < b.x + b.width &&
+    a.x + a.width > b.x &&
+    a.y < b.y + b.height &&
+    a.y + a.height > b.y;
+}
+function checkEnemyCollisions() {
+  const body = playerHitbox();
+  for (const enemy of enemies) {
+    const touching = enemy.active && checkCollision(body, enemyHitbox(enemy));
+    // 겹치기 시작할 때만 출력합니다. 떨어진 뒤 다시 닿으면 다시 출력합니다.
+    if (touching && !enemy.wasTouching) console.log("충돌!");
+    enemy.wasTouching = touching;
+  }
+}
+function drawHitboxes() {
+  if (!showHitbox) return;
+  ctx.save();
+  ctx.strokeStyle = "#ff5050";
+  ctx.lineWidth = 2;
+  const boxes = [playerHitbox()];
+  for (const enemy of enemies) {
+    if (enemy.active) boxes.push(enemyHitbox(enemy));
+  }
+  for (const box of boxes) ctx.strokeRect(box.x, box.y, box.width, box.height);
   ctx.restore();
 }
 
@@ -215,6 +254,9 @@ const vignette=ctx.createRadialGradient(camera.x+400,camera.y+310,140,camera.x+4
 vignette.addColorStop(0,"#00000000");vignette.addColorStop(1,"#00000035");
 ctx.fillStyle=vignette;ctx.fillRect(camera.x,camera.y+99,800,428);
 
+// 그림과 같은 카메라 변환 안에서 판정 영역을 그립니다.
+drawHitboxes();
+
 // 저해상도 월드를 두 배로 확대합니다. HUD는 화면에 고정합니다.
 ctx.restore();
 screenCtx.imageSmoothingEnabled = false;
@@ -238,7 +280,7 @@ label("FIELD STATUS",25,550,9,"#60777e");
 label("DRONE " + enemies.filter(e => e.active).length,130,550,11,"#f49aaf");label("에너지 +10",205,550,11,"#bddc8e");
 label("체력 3 · 피격 후 1초 무적",310,550,11,"#9bafae");
 ctx.textAlign="right";label("OPEN WORLD / INPUT DEMO",775,550,9,"#738a91");ctx.textAlign="left";
-label("방향키로 탐색 · 충돌·점수·체력 기능은 아직 구현하지 않았습니다",25,581,11,"#778b94");
+label("방향키로 이동 · 빨간 판정 영역이 겹치면 F12 콘솔에서 충돌 확인",25,581,11,"#778b94");
 ctx.textAlign="right";label("VIEW 800 × 600",775,581,9,"#778b94");ctx.textAlign="left";
 
 }
@@ -322,6 +364,7 @@ function gameLoop(timestamp) {
   updateCamera();
   updateMapItems();
   updateDrones();
+  checkEnemyCollisions();
   walkFrame = player.moving ? Math.floor(timestamp / 180) % 2 : 0;
   sideWalkFrame = player.moving ? Math.floor(timestamp / sideWalkFrameMs) % 2 : 0;
   motionFrame = Math.floor(timestamp / 160) % 3;
