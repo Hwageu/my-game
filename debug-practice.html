@@ -246,7 +246,7 @@ function collectCores() {
   for (const core of visibleCores) {
     if (!core.collected && checkCollision(body, coreHitbox(core))) {
       core.collected = true; // 다음 프레임에 같은 코어로 점수가 또 오르지 않게 합니다.
-      score += 1;
+      score += 10;
       collectedCoreCount += 1;
       if (collectedCoreCount % 5 === 0) health = Math.min(maxHealth, health + 1);
     }
@@ -575,7 +575,7 @@ document.addEventListener("keyup", function (e) {
   if (controlKeys.includes(e.key)) {
     e.preventDefault();
     keys[e.key] = false;
-    console.log("플레이어 위치:", playerr.x, player.y);
+    console.log("플레이어 위치:", player.x, player.y);
   }
 });
 function releaseKeys() {
@@ -598,7 +598,7 @@ function updatePlayer() {
   const length = Math.hypot(moveX, moveY);
   if (length > 0) {
     // 대각선에서도 직선과 같은 속도를 유지합니다.
-    player.x = player.x - moveX / length * playerSpeed;
+    player.x = player.x + moveX / length * playerSpeed;
     player.y = player.y + moveY / length * playerSpeed;
   }
   player.moving = length > 0;

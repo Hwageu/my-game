@@ -1,3 +1,6 @@
+// ===== ①. 준비 — Canvas와 그리기 도구 =====
+
+
 // 생성한 배경·투명 스프라이트와 Canvas 조명을 조합한 게임 루프 화면입니다.
 const canvas = document.getElementById("game");
 const screenCtx = canvas.getContext("2d");
@@ -5,6 +8,10 @@ const worldCanvas = document.createElement("canvas");
 worldCanvas.width = 400; worldCanvas.height = 300;
 const worldCtx = worldCanvas.getContext("2d");
 let ctx = worldCtx;
+
+// ===== ②. 상태 변수와 설정 =====
+
+
 const player = { x: 377, y: 292, size: 46, color: "#31ffa6", spriteWidth: 90, spriteHeight: 90, direction: 0, moving: false };
 // 직접 튜닝할 값: 한 프레임의 기준 이동량입니다. 1, 3, 5 등을 비교해 보세요.
 let droneSpeed = 1.15;
@@ -66,6 +73,53 @@ for (let i = 0; i < initialEnemyCount; i++) {
   });
 }
 
+// 모든 이미지 로딩을 마치면 게임 루프를 한 번만 시작합니다.
+const floorImage = new Image();
+const survivorImage = new Image();
+const survivorWalkImage = new Image();
+const survivorSideImage = new Image();
+const droneImage = new Image();
+const energyImage = new Image();
+let pendingImages = 6;
+
+// ===== ③. 이벤트 — 키 입력과 해제 =====
+
+
+// 방식 B: 이벤트에서는 키 상태만 기록하고, 위치 계산은 루프에서 합니다.
+const controlKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "];
+document.addEventListener("keydown", function (e) {
+  if ((e.key === "d" || e.key === "D") && !e.repeat) {
+    e.preventDefault();
+    showDebug = !showDebug;
+    showHitbox = showDebug;
+    return;
+  }
+  if ((e.key === "r" || e.key === "R") && gameState === "gameover" && !e.repeat) {
+    e.preventDefault();
+    resetGame();
+    return;
+  }
+  if (controlKeys.includes(e.key)) {
+    e.preventDefault();
+    keys[e.key] = true;
+  }
+});
+document.addEventListener("keyup", function (e) {
+  if (controlKeys.includes(e.key)) {
+    e.preventDefault();
+    keys[e.key] = false;
+  }
+});
+
+// 탭을 바꾸거나 창 밖에서 손을 뗐을 때 계속 이동하는 현상을 막습니다.
+window.addEventListener("blur", releaseKeys);
+document.addEventListener("visibilitychange", function () {
+  if (document.hidden) releaseKeys();
+});
+
+// ===== ④. 함수들 — 계산과 화면 표시 =====
+
+
 // 같은 모양과 조명을 반복해서 그릴 수 있도록 작은 함수로 나눕니다.
 function polygon(points, fill, stroke) {
   ctx.beginPath();
@@ -93,29 +147,9 @@ function glow(x, y, radius, color) {
   ctx.fillStyle = light; ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
 }
 
-// 모든 이미지 로딩을 마치면 게임 루프를 한 번만 시작합니다.
-const floorImage = new Image();
-const survivorImage = new Image();
-const survivorWalkImage = new Image();
-const survivorSideImage = new Image();
-const droneImage = new Image();
-const energyImage = new Image();
-let pendingImages = 6;
 function finishImageLoad() {
   pendingImages -= 1;
   if (pendingImages === 0) requestAnimationFrame(gameLoop);
-}
-for (const [image, path] of [
-  [floorImage, "assets/floor-tile.jpg"],
-  [survivorImage, "assets/survivor-directions.png"],
-  [survivorWalkImage, "assets/survivor-walk.png"],
-  [survivorSideImage, "assets/survivor-sidewalk.png"],
-  [droneImage, "assets/drone-directions.png"],
-  [energyImage, "assets/energy-core.png"]
-]) {
-  image.onload = finishImageLoad;
-  image.onerror = finishImageLoad;
-  image.src = path;
 }
 
 // 좌우 보행은 양발이 교차하는 전신 스프라이트만 사용합니다.
@@ -198,7 +232,7 @@ function drawHitboxes() {
   ctx.restore();
 }
 
-// 화면 좌표로 그리므로 월드를 이동해도 같은 자리에 표시됩니다.
+// 피격 효과는 캐릭터와 같은 월드 좌표로 그립니다.
 function drawHitFeedback(now) {
   if (lastHitTime === null) return;
   const age = now - lastHitTime;
@@ -495,6 +529,43 @@ function drawGameOver() {
   label("R 키를 눌러 다시 시작",400,390,17,"#e5ebe6");
   ctx.restore();
 }
+
+function releaseKeys() {
+  for (const key of Object.keys(keys)) keys[key] = false;
+}
+
+function updatePlayer() {
+  let moveX = 0;
+  let moveY = 0;
+  // 각 if를 따로 검사하므로 두 키를 누르면 대각선으로 이동합니다.
+  if (keys["ArrowLeft"]) moveX = moveX - 1;
+  if (keys["ArrowRight"]) moveX = moveX + 1;
+  if (keys["ArrowUp"]) moveY = moveY - 1;
+  if (keys["ArrowDown"]) moveY = moveY + 1;
+  const length = Math.hypot(moveX, moveY);
+  if (length > 0) {
+    // 대각선에서도 직선과 같은 속도를 유지합니다.
+    player.x = player.x + moveX / length * playerSpeed;
+    player.y = player.y + moveY / length * playerSpeed;
+  }
+  player.moving = length > 0;
+  // 마지막 방향을 유지하므로 손을 떼어도 대기 자세가 같은 방향을 바라봅니다.
+  if (moveY < 0) player.direction = 3;
+  else if (moveY > 0) player.direction = 0;
+  else if (moveX < 0) player.direction = 1;
+  else if (moveX > 0) player.direction = 2;
+  // 월드 이동에는 화면 크기를 기준으로 한 벽이나 제한을 두지 않습니다.
+}
+
+function updateCamera() {
+  // 플레이어를 HUD 아래의 게임 영역 중앙에 유지합니다.
+  camera.x = Math.round(player.x + player.size / 2 - canvas.width / 2);
+  camera.y = Math.round(player.y + player.size / 2 - (99 + 428 / 2));
+}
+
+// ===== ⑤. 게임 루프 — 지우기 / 계산 / 그리기 =====
+
+
 function gameLoop(timestamp) {
   // ① 지우기: 화면과 저해상도 월드의 지난 프레임을 없앱니다.
   worldCtx.setTransform(1, 0, 0, 1, 0, 0);
@@ -527,66 +598,18 @@ function gameLoop(timestamp) {
   requestAnimationFrame(gameLoop);
 }
 
+// ===== ⑥. 시동 — 이미지 준비 후 루프 한 번 시작 =====
 
-// 방식 B: 이벤트에서는 키 상태만 기록하고, 위치 계산은 루프에서 합니다.
-const controlKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "];
-document.addEventListener("keydown", function (e) {
-  if ((e.key === "d" || e.key === "D") && !e.repeat) {
-    e.preventDefault();
-    showDebug = !showDebug;
-    showHitbox = showDebug;
-    return;
-  }
-  if ((e.key === "r" || e.key === "R") && gameState === "gameover" && !e.repeat) {
-    e.preventDefault();
-    resetGame();
-    return;
-  }
-  if (controlKeys.includes(e.key)) {
-    e.preventDefault();
-    keys[e.key] = true;
-  }
-});
-document.addEventListener("keyup", function (e) {
-  if (controlKeys.includes(e.key)) {
-    e.preventDefault();
-    keys[e.key] = false;
-  }
-});
-function releaseKeys() {
-  for (const key of Object.keys(keys)) keys[key] = false;
-}
-// 탭을 바꾸거나 창 밖에서 손을 뗐을 때 계속 이동하는 현상을 막습니다.
-window.addEventListener("blur", releaseKeys);
-document.addEventListener("visibilitychange", function () {
-  if (document.hidden) releaseKeys();
-});
 
-function updatePlayer() {
-  let moveX = 0;
-  let moveY = 0;
-  // 각 if를 따로 검사하므로 두 키를 누르면 대각선으로 이동합니다.
-  if (keys["ArrowLeft"]) moveX = moveX - 1;
-  if (keys["ArrowRight"]) moveX = moveX + 1;
-  if (keys["ArrowUp"]) moveY = moveY - 1;
-  if (keys["ArrowDown"]) moveY = moveY + 1;
-  const length = Math.hypot(moveX, moveY);
-  if (length > 0) {
-    // 대각선에서도 직선과 같은 속도를 유지합니다.
-    player.x = player.x + moveX / length * playerSpeed;
-    player.y = player.y + moveY / length * playerSpeed;
-  }
-  player.moving = length > 0;
-  // 마지막 방향을 유지하므로 손을 떼어도 대기 자세가 같은 방향을 바라봅니다.
-  if (moveY < 0) player.direction = 3;
-  else if (moveY > 0) player.direction = 0;
-  else if (moveX < 0) player.direction = 1;
-  else if (moveX > 0) player.direction = 2;
-  // 월드 이동에는 화면 크기를 기준으로 한 벽이나 제한을 두지 않습니다.
-}
-
-function updateCamera() {
-  // 플레이어를 HUD 아래의 게임 영역 중앙에 유지합니다.
-  camera.x = Math.round(player.x + player.size / 2 - canvas.width / 2);
-  camera.y = Math.round(player.y + player.size / 2 - (99 + 428 / 2));
+for (const [image, path] of [
+  [floorImage, "assets/floor-tile.jpg"],
+  [survivorImage, "assets/survivor-directions.png"],
+  [survivorWalkImage, "assets/survivor-walk.png"],
+  [survivorSideImage, "assets/survivor-sidewalk.png"],
+  [droneImage, "assets/drone-directions.png"],
+  [energyImage, "assets/energy-core.png"]
+]) {
+  image.onload = finishImageLoad;
+  image.onerror = finishImageLoad;
+  image.src = path;
 }
