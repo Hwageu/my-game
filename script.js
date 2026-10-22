@@ -7,12 +7,12 @@ const worldCtx = worldCanvas.getContext("2d");
 let ctx = worldCtx;
 const player = { x: 377, y: 292, size: 46, color: "#31ffa6", spriteWidth: 90, spriteHeight: 90, direction: 0, moving: false };
 // 직접 튜닝할 값: 한 프레임의 기준 이동량입니다. 1, 3, 5 등을 비교해 보세요.
-let droneSpeed = 1;
-// 6장 배열 실습: 3을 8로 바꾸면 같은 반복문으로 8대를 처리합니다.
-const initialEnemyCount = 3;
+let droneSpeed = 1.15;
+// 난이도 설정: 드론 4대, 이전 기준보다 이동 속도 15% 증가.
+const initialEnemyCount = 4;
 const droneSize = { width: 82, height: 52 };
 // 충돌 실습 중에는 true, 최종 제출 때는 false로 바꿉니다.
-let showHitbox = true;
+let showHitbox = false;
 // 직접 튜닝할 플레이어 속도입니다. 드론 속도와 별개입니다.
 let playerSpeed = 2;
 const keys = {};
