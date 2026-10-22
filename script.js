@@ -56,6 +56,9 @@ const itemChunks = new Map();
 let visibleCores = [];
 // 코어 한 개당 10점입니다.
 let score = 0;
+const highScoreKey = "neon-survivor-high-score";
+let highScore = loadHighScore();
+let isNewRecord = false;
 let gameState = "start";
 const maxHealth = 3;
 let health = maxHealth;
@@ -151,6 +154,23 @@ document.addEventListener("visibilitychange", function () {
 
 
 // 소리는 한 번만 만들고 재사용합니다. 실패해도 게임은 계속 실행합니다.
+// 저장된 값은 글자이므로 숫자로 바꾼 뒤 비교합니다.
+function loadHighScore() {
+  try {
+    const value = Number(localStorage.getItem(highScoreKey));
+    return Number.isSafeInteger(value) && value >= 0 ? value : 0;
+  } catch { return 0; }
+}
+function updateHighScore() {
+  // 다른 탭에서 더 높은 기록을 저장했어도 낮추지 않습니다.
+  highScore = Math.max(highScore, loadHighScore());
+  isNewRecord = score > highScore;
+  if (!isNewRecord) return;
+  highScore = score;
+  try { localStorage.setItem(highScoreKey, String(highScore)); }
+  catch { /* 저장이 막혀도 현재 화면의 기록은 유지합니다. */ }
+}
+
 function makeSound(source, volume) {
   try {
     const sound = new Audio(source);
@@ -247,6 +267,7 @@ function checkEnemyCollisions(now) {
       lastHitTime = now;
       if (health === 0) {
         gameState = "gameover";
+        updateHighScore();
         player.moving = false;
         releaseKeys();
       }
@@ -445,6 +466,7 @@ label("NEON SURVIVOR",24,61,30,"#e5ebe6","bold");
 label("끝없이 이어지는 구역을 탐색하며 살아남으세요",26,82,11,"#8a9d9f");
 line(414,22,414,77,"#303a43");
 label("SCORE",438,30,9);label(String(score).padStart(4, "0"),437,59,25,"#e9efea","bold");
+label("BEST " + highScore,546,82,10,"#bddc8e");
 label("SURVIVAL",546,30,9);label(formatTime(elapsedSeconds),545,59,25,"#e9efea","bold");
 label("VITALS",667,30,9);label(health + " / " + maxHealth,739,30,9,"#94c9a4");
 for(let i=0;i<3;i++) {
@@ -549,6 +571,7 @@ function formatTime(seconds) {
 }
 // 새 루프를 만들지 않고, 이번 판의 값만 처음 상태로 되돌립니다.
 function resetGame() {
+  isNewRecord = false;
   for (const sound of Object.values(soundEffects)) {
     if (!sound) continue;
     try { sound.pause(); sound.currentTime = 0; } catch {}
@@ -588,7 +611,8 @@ function drawStartScreen() {
   label("방향키 이동 · 코어 +10점 · 5개마다 체력 회복",400,315,14,"#9bafae");
   label("체력 3 · 피격 후 1초 무적 · 게임 오버 후 R 재시작",400,345,13,"#9bafae");
   label("M: 음소거 켜기 / 끄기",400,377,13,"#9bafae");
-  label("아무 키나 누르거나 화면을 클릭해 시작",400,420,17,"#e5ebe6","bold");
+  label("최고 점수: " + highScore,400,400,13,"#bddc8e");
+  label("아무 키나 누르거나 화면을 클릭해 시작",400,440,17,"#e5ebe6","bold");
   ctx.restore();
 }
 
@@ -598,12 +622,14 @@ function drawGameOver() {
   ctx.fillStyle = "rgba(3,10,16,0.86)";
   ctx.fillRect(0,99,800,428);
   ctx.strokeStyle = "#83c6a0"; ctx.lineWidth = 2;
-  ctx.strokeRect(170,195,460,230);
+  ctx.strokeRect(170,175,460,275);
   ctx.textAlign = "center";
-  label("GAME OVER",400,255,42,"#e5ebe6","bold");
-  label("최종 점수: " + score,400,305,22,"#bddc8e");
-  label("생존 시간: " + formatTime(elapsedSeconds),400,340,16,"#9bafae");
-  label("R 키를 눌러 다시 시작",400,390,17,"#e5ebe6");
+  label("GAME OVER",400,235,42,"#e5ebe6","bold");
+  label("최종 점수: " + score,400,280,22,"#bddc8e");
+  label("최고 점수: " + highScore,400,315,18,"#bddc8e");
+  label("생존 시간: " + formatTime(elapsedSeconds),400,348,16,"#9bafae");
+  if (isNewRecord) label("신기록!",400,380,19,"#e8d389","bold");
+  label("R 키를 눌러 다시 시작",400,421,17,"#e5ebe6");
   ctx.restore();
 }
 
