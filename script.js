@@ -8,6 +8,9 @@ let ctx = worldCtx;
 const player = { x: 377, y: 292, size: 46, color: "#31ffa6", spriteWidth: 90, spriteHeight: 90, direction: 0, moving: false };
 // 직접 튜닝할 값: 한 프레임의 기준 이동량입니다. 1, 3, 5 등을 비교해 보세요.
 let droneSpeed = 1;
+// 6장 배열 실습: 3을 8로 바꾸면 같은 반복문으로 8대를 처리합니다.
+const initialEnemyCount = 3;
+const droneSize = { width: 82, height: 52 };
 // 직접 튜닝할 플레이어 속도입니다. 드론 속도와 별개입니다.
 let playerSpeed = 2;
 const keys = {};
@@ -30,21 +33,19 @@ const walkingFrames = [
   [{ x:160,y:779,w:240,h:307 }, { x:627,y:780,w:240,h:303,flip:true }],
   [{ x:162,y:1137,w:205,h:332 }, { x:661,y:1136,w:198,h:332 }]
 ];
-const enemies = [
-  { x: 210, y: 220, vx: 0.8, vy: 0.55, radius: 20 },
-  { x: 610, y: 245, vx: -0.65, vy: 0.8, radius: 20 },
-  { x: 565, y: 435, vx: 0.55, vy: -0.65, radius: 20 }
-];
+const enemies = [];
 let motionFrame = 0;
 let floorPattern = null;
-const droneSize = { width: 82, height: 52 };
 const mapChunkSize = 640;
 const itemChunks = new Map();
 let visibleCores = [];
-// 드론 수는 3대로 유지하고 첫 등장 시점을 조금씩 나눕니다.
-for (let i = 0; i < enemies.length; i++) {
-  enemies[i].active = false;
-  enemies[i].spawnDelay = i * 100;
+// 개수만 바꾸면 이동·그리기 반복문을 고치지 않아도 됩니다.
+for (let i = 0; i < initialEnemyCount; i++) {
+  enemies.push({
+    x: 0, y: 0, vx: 0, vy: 0,
+    speed: 0.8 + (i % 3) * 0.125,
+    active: false, spawnDelay: i * 100
+  });
 }
 
 // 같은 모양과 조명을 반복해서 그릴 수 있도록 작은 함수로 나눕니다.
@@ -257,7 +258,7 @@ function spawnDrone(enemy) {
   const targetY = player.y + player.size / 2 + (Math.random() - 0.5) * 140;
   const dx = targetX - enemy.x, dy = targetY - enemy.y;
   const distance = Math.hypot(dx, dy) || 1;
-  const speed = 0.8 + Math.random() * 0.25;
+  const speed = enemy.speed;
   enemy.vx = dx / distance * speed;
   enemy.vy = dy / distance * speed;
   enemy.active = true;
