@@ -8,6 +8,9 @@ let ctx = worldCtx;
 const player = { x: 377, y: 292, size: 46, color: "#31ffa6", spriteWidth: 90, spriteHeight: 90, direction: 0, moving: false };
 // 직접 튜닝할 값: 한 프레임의 기준 이동량입니다. 1, 3, 5 등을 비교해 보세요.
 let droneSpeed = 1.15;
+const droneSpeedInterval = 20; // 이 시간(초)마다 속도를 올립니다.
+const droneSpeedStep = 0.1;
+const maxDroneSpeedMultiplier = 1.8;
 // 난이도 설정: 드론 4대, 이전 기준보다 이동 속도 15% 증가.
 const initialEnemyCount = 4;
 const droneSize = { width: 82, height: 52 };
@@ -342,14 +345,20 @@ function spawnDrone(enemy) {
   enemy.vy = dy / distance * speed;
   enemy.active = true;
 }
+// 이전 속도에 곱하지 않고 초기 속도를 기준으로 10%씩 더합니다.
+function getDroneSpeedMultiplier() {
+  return Math.min(maxDroneSpeedMultiplier,
+    1 + Math.floor(elapsedSeconds / droneSpeedInterval) * droneSpeedStep);
+}
 function updateDrones() {
+  const currentDroneSpeed = droneSpeed * getDroneSpeedMultiplier();
   for (const enemy of enemies) {
     if (!enemy.active) {
       if (enemy.spawnDelay > 0) { enemy.spawnDelay--; continue; }
       spawnDrone(enemy);
     }
-    enemy.x += enemy.vx * droneSpeed;
-    enemy.y += enemy.vy * droneSpeed;
+    enemy.x += enemy.vx * currentDroneSpeed;
+    enemy.y += enemy.vy * currentDroneSpeed;
     // 충분히 멀어진 적은 즉시 순간이동시키지 않고 잠시 뒤 새로 진입시킵니다.
     if (enemy.x < camera.x - 180 || enemy.x > camera.x + 980 ||
         enemy.y < camera.y - 81 || enemy.y > camera.y + 707) {
