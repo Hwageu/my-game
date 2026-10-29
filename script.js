@@ -22,6 +22,7 @@ const maxDroneSpeedMultiplier = 1.8;
 const initialEnemyCount = 4;
 const enemyCountInterval = 10; // 10초마다 드론 한 대를 추가합니다.
 const maxEnemyCount = 12;
+const hunterStartTime = 12; // 조작을 익힌 뒤 추적 드론이 진입합니다.
 const hunterSpeed = 0.65;
 const hunterNearSpeed = 0.95;
 const hunterDetectionRange = 220;
@@ -111,6 +112,7 @@ let pendingImages = 6;
 // 방식 B: 이벤트에서는 키 상태만 기록하고, 위치 계산은 루프에서 합니다.
 const controlKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "];
 document.addEventListener("keydown", function (e) {
+  if (["INPUT", "TEXTAREA"].includes(e.target?.tagName)) return;
   if (!e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && gameState !== "playing") {
     if (e.key === "l" || e.key === "L") {
       e.preventDefault(); showLeaderboard = !showLeaderboard;
@@ -173,6 +175,14 @@ window.addEventListener("blur", releaseKeys);
 document.addEventListener("visibilitychange", function () {
   if (document.hidden) releaseKeys();
 });
+
+const rankForm = document.getElementById("rankForm");
+if (rankForm) {
+  rankForm.addEventListener("submit", function (e) {
+    e.preventDefault(); submitRanking(document.getElementById("nickname").value);
+  });
+  document.getElementById("cancelRank").addEventListener("click", function () { showNicknameForm(false); });
+}
 
 // ===== ④. 함수들 — 계산과 화면 표시 =====
 
@@ -250,16 +260,22 @@ async function loadLeaderboard() {
     rankingStatus = rankingRows.length ? "" : "첫 기록을 등록해 보세요";
   } catch { rankingStatus = "랭킹을 불러올 수 없습니다"; }
 }
-async function submitRanking() {
+function showNicknameForm(show) {
+  const form = document.getElementById("rankForm");
+  if (!form) return;
+  form.hidden = !show;
+  if (show) document.getElementById("nickname").focus();
+}
+async function submitRanking(input) {
   if (gameState !== "gameover" || rankSubmitting || rankSubmitted) return;
   if (!rankingReady()) { rankingStatus = "온라인 랭킹 연결 준비 중"; showLeaderboard = true; return; }
   if (!Number.isSafeInteger(score) || score < 0 || score > 1000000) return;
-  const input = window.prompt("공개 닉네임 1~8자 (실명·학번·연락처 입력 금지)", "익명");
-  if (input === null) return;
+  if (typeof input !== "string") { showNicknameForm(true); return; }
   const name = input.trim() || "익명";
   if (!/^[\p{L}\p{N}_ -]{1,8}$/u.test(name)) {
     rankingStatus = "닉네임은 글자·숫자·공백·_- 1~8자"; showLeaderboard = true; return;
   }
+  showNicknameForm(false);
   const submittedRun = runId;
   rankSubmitting = true; showLeaderboard = true; rankingStatus = "등록 중...";
   try {
@@ -640,6 +656,7 @@ function updateEnemyCount() {
 function updateDrones() {
   const currentDroneSpeed = droneSpeed * getDroneSpeedMultiplier();
   for (const enemy of enemies) {
+    if (enemy.isHunter && elapsedSeconds < hunterStartTime) continue;
     if (!enemy.active) {
       if (enemy.spawnDelay > 0) { enemy.spawnDelay--; continue; }
       spawnDrone(enemy);
@@ -700,6 +717,7 @@ function formatTime(seconds) {
 }
 // 새 루프를 만들지 않고, 이번 판의 값만 처음 상태로 되돌립니다.
 function resetGame() {
+  showNicknameForm(false);
   runId += 1; rankSubmitted = false; rankSubmitting = false; showLeaderboard = false;
   isNewRecord = false;
   gameOverMessage = "";
@@ -741,7 +759,7 @@ function drawStartScreen() {
   label("드론을 피하고 코어를 모으며 오래 살아남으세요",400,270,17,"#bddc8e");
   label("방향키 이동 · 코어 +10점 · 5개마다 체력 회복",400,315,14,"#9bafae");
   label("체력 3 · 피격 후 1초 무적 · 게임 오버 후 R 재시작",400,345,13,"#9bafae");
-  label("M: 음소거 켜기 / 끄기",400,377,13,"#9bafae");
+  label("M 음소거 · L 온라인 TOP 10",400,377,13,"#9bafae");
   label("최고 점수: " + highScore,400,400,13,"#bddc8e");
   label("PC에서 방향키로 플레이해 주세요 · 터치 이동 미지원",400,463,11,"#9bafae");
   label("아무 키나 누르거나 화면을 클릭해 시작",400,440,17,"#e5ebe6","bold");

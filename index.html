@@ -10,11 +10,17 @@
   <main class="console" aria-label="네온 서바이벌 레트로 게임 화면">
     <div class="console-header" aria-hidden="true"><span class="console-logo">NEON <b>SURVIVOR</b></span><span class="console-model">SURVIVAL SYSTEM</span></div>
     <div class="crt-screen">
-      <canvas id="game" width="800" height="600" aria-label="네온 서바이벌 게임 화면">Canvas를 지원하는 브라우저에서 열어 주세요.</canvas>
+      <canvas tabindex="0" id="game" width="800" height="600" aria-label="네온 서바이벌 게임 화면">Canvas를 지원하는 브라우저에서 열어 주세요.</canvas>
     </div>
     <div class="console-footer" aria-hidden="true"><span class="power-light"></span><span>POWER</span><span class="vent"></span><span>NS · 01</span></div>
     <p class="platform-note">PC에서 방향키로 플레이해 주세요. 휴대폰에서는 화면·소리 확인이 가능하며 터치 이동은 지원하지 않습니다.</p>
   </main>
+  <form id="rankForm" hidden>
+    <label for="nickname">공개 닉네임 (1~8자)</label>
+    <input id="nickname" name="nickname" maxlength="8" placeholder="익명" autocomplete="off" aria-describedby="rankPrivacy">
+    <p id="rankPrivacy">실명·학번·연락처를 입력하지 마세요. 닉네임과 점수가 공개됩니다.</p>
+    <button type="submit">기록 등록</button><button type="button" id="cancelRank">취소</button>
+  </form>
   <script src="script.js?v=20261029-final"></script>
 </body>
 </html>
