@@ -38,6 +38,8 @@ let playerSpeed = 2;
 const keys = {};
 const joystickKeys = {};
 let fpsActive = false;
+const menuMusic = new Audio("assets/menu-chip.wav");menuMusic.loop=true;menuMusic.volume=.35;
+function syncMenuMusic(){if(!isMuted&&!document.getElementById("arcadeMenu").hidden&&!document.hidden)menuMusic.play().catch(()=>{});else menuMusic.pause();}
 const joystick = document.querySelector(".joystick");
 // camera는 월드에서 화면 왼쪽 위가 가리키는 위치입니다.
 const camera = { x: 0, y: 0 };
@@ -178,6 +180,7 @@ document.addEventListener("keydown", function (e) {
       }
     }
     if (!isMuted) startBackgroundMusic();
+    syncMenuMusic();
     return;
   }
   if (gameState === "start") {
@@ -979,6 +982,7 @@ const menuGames = [
   {id:"selectCyber", title:"CYBER ESCAPE", description:"사이버 탈출 게임 · 준비 중", ready:false}
 ];
 function selectMenuGame(step) {
+  syncMenuMusic();
   selectedMenuGame = (selectedMenuGame + step + menuGames.length) % menuGames.length;
   menuGames.forEach((game, i) => {
     const button = document.getElementById(game.id);
@@ -989,11 +993,14 @@ function selectMenuGame(step) {
   const preview = document.getElementById("menuPreview");
   preview.querySelector("span").textContent = game.title;
   preview.classList.toggle("pending", !game.ready);
+  preview.classList.toggle("fps-preview", selectedMenuGame === 1);
   document.getElementById("menuDescription").textContent = game.description;
   document.getElementById("menuAvailability").textContent = game.ready ? (selectedMenuGame === 1 ? "3D FPS · 1 PLAYER" : "SURVIVAL · 1 PLAYER") : "COMING SOON";
   document.getElementById("menuStatus").textContent = "↑ ↓ SELECT　 ENTER START";
 }
 function launchMenuGame() {
+  menuMusic.pause();
+  if(matchMedia("(pointer:coarse)").matches||navigator.maxTouchPoints>0)document.body.classList.add("touch-play");
   if (selectedMenuGame === 1) {
     pauseGame(); stopBackgroundMusic(); releaseKeys(); fpsActive = true;
     document.getElementById("arcadeMenu").hidden = true;
@@ -1039,6 +1046,7 @@ document.getElementById("pauseButton").addEventListener("click", function () {
   canvas.focus({ preventScroll: true });
 });
 document.getElementById("menuButton").addEventListener("click", function () {
+  document.body.classList.remove("touch-play");
   if (fpsActive) { document.getElementById("fpsFrame").contentWindow.postMessage({type:"void-pause"},location.origin); fpsActive = false; document.getElementById("fpsConsole").hidden = true; }
   pauseGame(); showNicknameForm(false);
   document.getElementById("arcadeMenu").hidden = false;
@@ -1056,3 +1064,19 @@ window.addEventListener("message", function(e) { if(e.origin === location.origin
 
 document.getElementById("cabinetFullscreen").addEventListener("click", async function(){try{if(document.fullscreenElement)await document.exitFullscreen();else await document.getElementById("arcadeCabinet").requestFullscreen();if(!fpsActive&&!document.getElementById("gameConsole").hidden)canvas.focus({preventScroll:true});}catch{this.textContent="전체화면 사용 불가";}});
 document.addEventListener("fullscreenchange",function(){document.getElementById("cabinetFullscreen").textContent=document.fullscreenElement?"화면 줄이기":"전체화면";});
+
+document.addEventListener("pointerdown",syncMenuMusic);
+document.addEventListener("keydown",syncMenuMusic);
+document.addEventListener("visibilitychange",syncMenuMusic);
+
+let coinAudio;
+document.getElementById("coinInsert").addEventListener("click",function(){try{coinAudio ||= new AudioContext();coinAudio.resume();[1175,1760,2349].forEach((f,i)=>{const o=coinAudio.createOscillator(),g=coinAudio.createGain(),t=coinAudio.currentTime+i*.07;o.type='square';o.frequency.value=f;g.gain.setValueAtTime(isMuted?0:.035,t);g.gain.exponentialRampToValueAtTime(.0001,t+.12);o.connect(g).connect(coinAudio.destination);o.start(t);o.stop(t+.13);});this.classList.remove('coin-flash');void this.offsetWidth;this.classList.add('coin-flash');}catch{}});
+
+const neonPad=document.getElementById('neonPad');let neonPointer=null;
+function resetNeonPad(){neonPointer=null;neonPad.querySelector('i').style.transform='translate(0,0)';releaseKeys();}
+function moveNeonPad(e){if(e.pointerId!==neonPointer)return;const r=neonPad.getBoundingClientRect();let x=(e.clientX-r.left-r.width/2)/(r.width*.32),y=(e.clientY-r.top-r.height/2)/(r.height*.32);const l=Math.max(1,Math.hypot(x,y));x/=l;y/=l;neonPad.querySelector('i').style.transform='translate('+x*28+'px,'+y*28+'px)';for(const [k,v] of Object.entries({ArrowLeft:x<-.2,ArrowRight:x>.2,ArrowUp:y<-.2,ArrowDown:y>.2})){keys[k]=gameState==='playing'&&v;joystickKeys[k]=v;}updateJoystick();}
+neonPad.addEventListener('pointerdown',e=>{if(neonPointer!==null)return;e.preventDefault();neonPointer=e.pointerId;neonPad.setPointerCapture(e.pointerId);moveNeonPad(e);});neonPad.addEventListener('pointermove',moveNeonPad);for(const event of ['pointerup','pointercancel','lostpointercapture'])neonPad.addEventListener(event,e=>{if(e.pointerId===neonPointer)resetNeonPad();});
+document.getElementById('neonTouchPause').onclick=()=>{if(gameState==='playing')pauseGame();else if(gameState==='paused')resumeGame();resetNeonPad();};document.getElementById('neonTouchRestart').onclick=()=>{resetNeonPad();resetGame();};
+document.getElementById('menuSound').onclick=function(){isMuted=!isMuted;this.textContent=isMuted?'음악 OFF':'음악 ON';for(const sound of [...Object.values(soundEffects),backgroundMusic])if(sound)sound.muted=isMuted;syncMenuMusic();if(!isMuted)startBackgroundMusic();};
+
+document.getElementById('touchMode').onclick=()=>document.body.classList.toggle('touch-play');
