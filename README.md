@@ -6,7 +6,7 @@
 
 - 학번 / 이름: 202370036 / 서준영
 
-![게임 시작 화면](assets/screenshot.png)
+![게임 시작 화면](screenshot.png)
 
 ## 조작법
 
@@ -15,7 +15,7 @@
 | 시작 화면에서 키 또는 클릭 | 게임 시작 |
 | 방향키 | 상하좌우·대각선 이동 |
 | R | 게임 오버 후 재시작 |
-| M | 음소거 전환 |
+| M | 배경음악·효과음 전체 음소거 전환 |
 | D | 디버그 정보와 판정 영역 전환 |
 | L | 시작·게임 오버 화면에서 온라인 TOP 10 |
 | N | 게임 오버 후 닉네임으로 기록 등록 |
@@ -23,6 +23,8 @@
 M·L은 시작 대신 해당 기능을 실행합니다. 디버그는 기본으로 꺼져 있습니다.
 
 ## 규칙
+
+- 플레이 중에는 20초 길이의 레트로 신스 음악을 음량 0.16으로 반복합니다. 시작 전에는 재생하지 않고, 게임 오버 때 정지합니다. M키로 음악과 효과음을 함께 끕니다.
 
 - 체력 3, 코어 1개당 10점, 5개마다 체력 1 회복(최대 3).
 - 충돌 시 체력 1 감소와 1초 무적, 체력 0이면 종료.
@@ -62,14 +64,22 @@ Windows, VS Code, Live Server, Git·GitHub, GitHub Pages를 사용합니다. 폴
 | assets/survivor-sidewalk.png | 좌우 보행 | 프로젝트용 AI 생성(OpenAI 이미지 생성 도구) | 외부 원본 없음·별도 공개 라이선스 미지정 |
 | assets/drone-directions.png | 드론 모션 | 프로젝트용 AI 생성(OpenAI 이미지 생성 도구) | 외부 원본 없음·별도 공개 라이선스 미지정 |
 | assets/energy-core.png | 코어 첫 프레임 | 프로젝트용 AI 생성(OpenAI 이미지 생성 도구) | 외부 원본 없음·별도 공개 라이선스 미지정 |
-| assets/survivor.png | 초기 생존자 참조 | 프로젝트용 AI 생성(OpenAI 이미지 생성 도구) | 외부 원본 없음·별도 공개 라이선스 미지정 |
-| assets/drone.png | 초기 드론 참조 | 프로젝트용 AI 생성(OpenAI 이미지 생성 도구) | 외부 원본 없음·별도 공개 라이선스 미지정 |
 | assets/point.wav | 코어 효과음 | 직접 합성 | 외부 원음 없음·별도 라이선스 미지정 |
 | assets/hit.wav | 피격 효과음 | 직접 합성 | 외부 원음 없음·별도 라이선스 미지정 |
 | assets/gameover.wav | 종료 효과음 | 직접 합성 | 외부 원음 없음·별도 라이선스 미지정 |
+| assets/ambience.wav | 20초 레트로 신스 BGM | 프로젝트용 직접 작곡·합성 | 외부 음원 없음·별도 라이선스 미지정 |
 | messages.json | 점수별 응원 | ChatGPT로 사전 작성 | 외부 원문 없음·별도 라이선스 미지정 |
-| assets/screenshot.png | 게임 화면 | 실행 화면 직접 캡처 | 본 프로젝트 화면 |
+| screenshot.png | 게임 화면 | 실행 화면 직접 캡처 | 본 프로젝트 화면 |
 | Phaser 3.86.0 | 별도 비교 예제만 | [공식 프로젝트](https://github.com/phaserjs/phaser)·cdnjs CDN | MIT, 본 게임에는 미사용 |
+
+## 파일 구성
+
+- 실행: index.html·style.css·script.js·messages.json, screenshot.png, assets/
+- 본과정 문서: README.md·기획서.md·회고.md·디버깅기록.md·플레이테스트.md·테스트목록.md·발표.md
+- 필수 실습: debug-practice.html(7장), phaser-test.html·learn-test.html(12장)
+- 심화 자료: ranking-schema.sql·보안점검.md·비교.md·ai설계.md
+
+실습 파일은 게임 본체와 별개이며 워크북 제출물이라 유지합니다. 미사용 초기 이미지 2개와 선택 API 연습 파일은 외부 백업 후 정리했습니다. 1주차 자기소개 원본은 상위 week01 폴더에 보존되어 있습니다.
 
 ## 제작 과정
 
@@ -85,7 +95,7 @@ Windows, VS Code, Live Server, Git·GitHub, GitHub Pages를 사용합니다. 폴
 
 [회고](회고.md) · [플레이테스트](플레이테스트.md) · [테스트 목록](테스트목록.md) · [디버깅 기록](디버깅기록.md) · [발표 원고](발표.md) · [도구 비교](비교.md) · [AI 설계](ai설계.md)
 
-[숨은 버그 연습](debug-practice.html) · [API 연습](api-test.html) · [Phaser 비교](phaser-test.html) · [입자 효과](learn-test.html)
+[숨은 버그 연습](debug-practice.html) · [Phaser 비교](phaser-test.html) · [입자 효과](learn-test.html)
 
 ## 검증 결과
 
@@ -98,4 +108,10 @@ Windows, VS Code, Live Server, Git·GitHub, GitHub Pages를 사용합니다. 폴
 - [x] 별도 예제 중력 450→600·입자 수 12→30 변경 실행 확인
 - [ ] 시크릿 모드 전체 플레이와 실제 3분 발표
 
-터치 이동과 인증·점수 검증 강화는 후속 개선으로 남깁니다. 가상 예시는 실제 사람의 테스트와 구분하고, 발표 원고 작성과 실제 발표도 구분합니다.
+터치 이동과 인증·점수 검증 강화는 후속 개선으로 남깁니다. 실제 사람의 테스트 기록만 유지하며, 발표 원고 작성과 실제 발표는 구분합니다.
+
+### 게임 선택과 일시정지
+
+오락기 형태의 NEON ARCADE 메뉴에서 NEON SURVIVOR를 선택합니다. 다른 두 게임은 준비 중이며 실행되지 않습니다. 게임 중 P 또는 ESC, 화면 아래 일시정지 버튼으로 멈출 수 있습니다. 재개하면 3·2·1 뒤 이어집니다. 멈춘 시간과 카운트다운은 생존 시간·난이도·무적 시간에서 제외하며 배경음악도 멈춥니다. 탭이나 창을 벗어나면 자동으로 일시정지합니다. 게임 선택 메뉴로 돌아갔다가 현재 판을 이어갈 수도 있습니다.
+
+메뉴에서는 ↑·↓로 선택하고 Enter·Space 또는 조작대 START 버튼으로 실행합니다. 조이스틱 위·아래 버튼이나 게임 이름 클릭으로도 선택할 수 있습니다. 준비 중인 게임을 선택해 실행하면 안내 문구를 표시합니다. 캐비닛 구조는 첨부된 오락기 사진과 [Neo Geo MVS 자료](https://www.arcade-museum.com/Videogame/neo-geo-mvs)를 참고했으며, 외부 로고·게임 그림은 사용하지 않았습니다.

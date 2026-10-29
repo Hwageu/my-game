@@ -67,6 +67,21 @@ const highScoreKey = "neon-survivor-high-score";
 let highScore = loadHighScore();
 let isNewRecord = false;
 let gameState = "start";
+let pauseStartedAt = 0;
+let pausedDuration = 0;
+let resumeDeadline = 0;
+function gameNow() { return (pauseStartedAt || Date.now()) - pausedDuration; }
+function pauseGame() {
+  if (gameState === "countdown") { gameState = "paused"; resumeDeadline = 0; releaseKeys(); return; }
+  if (gameState !== "playing") return;
+  pauseStartedAt = Date.now(); gameState = "paused"; releaseKeys();
+  if (backgroundMusic) backgroundMusic.pause();
+}
+function resumeGame() {
+  if (gameState !== "paused") return;
+  resumeDeadline = Date.now() + 3000; gameState = "countdown";
+}
+
 const maxHealth = 3;
 let health = maxHealth;
 let collectedCoreCount = 0;
@@ -88,6 +103,9 @@ const soundEffects = {
   hit: makeSound("assets/hit.wav", 0.5),
   gameover: makeSound("assets/gameover.wav", 0.45)
 };
+const backgroundMusic = makeSound("assets/ambience.wav", 0.16);
+if (backgroundMusic) backgroundMusic.loop = true;
+
 // 개수만 바꾸면 이동·그리기 반복문을 고치지 않아도 됩니다.
 for (let i = 0; i < initialEnemyCount; i++) {
   enemies.push({
@@ -112,7 +130,24 @@ let pendingImages = 6;
 // 방식 B: 이벤트에서는 키 상태만 기록하고, 위치 계산은 루프에서 합니다.
 const controlKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "];
 document.addEventListener("keydown", function (e) {
-  if (["INPUT", "TEXTAREA"].includes(e.target?.tagName)) return;
+  if (!document.getElementById("arcadeMenu").hidden) {
+    if (["ArrowUp", "ArrowDown", "Enter", " "].includes(e.key)) {
+      e.preventDefault();
+      if (e.key === "ArrowUp") selectMenuGame(-1);
+      else if (e.key === "ArrowDown") selectMenuGame(1);
+      else if (!e.repeat) launchMenuGame();
+    }
+    return;
+  }
+  if (["INPUT", "TEXTAREA", "BUTTON"].includes(e.target?.tagName)) return;
+  if ((e.key === "Escape" || e.key.toLowerCase() === "p") && !e.repeat) {
+    e.preventDefault();
+    if (gameState === "playing") pauseGame(); else if (gameState === "paused") resumeGame();
+    return;
+  }
+  if (gameState === "paused" || gameState === "countdown") {
+    if (e.key.toLowerCase() !== "m") return;
+  }
   if (!e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && gameState !== "playing") {
     if (e.key === "l" || e.key === "L") {
       e.preventDefault(); showLeaderboard = !showLeaderboard;
@@ -126,13 +161,14 @@ document.addEventListener("keydown", function (e) {
   if ((e.key === "m" || e.key === "M") && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) {
     e.preventDefault();
     isMuted = !isMuted;
-    for (const sound of Object.values(soundEffects)) {
+    for (const sound of [...Object.values(soundEffects), backgroundMusic]) {
       if (!sound) continue;
       sound.muted = isMuted;
       if (isMuted) {
         try { sound.pause(); sound.currentTime = 0; } catch {}
       }
     }
+    if (!isMuted) startBackgroundMusic();
     return;
   }
   if (gameState === "start") {
@@ -171,9 +207,9 @@ document.addEventListener("keyup", function (e) {
 });
 
 // 탭을 바꾸거나 창 밖에서 손을 뗐을 때 계속 이동하는 현상을 막습니다.
-window.addEventListener("blur", releaseKeys);
+window.addEventListener("blur", function () { releaseKeys(); pauseGame(); });
 document.addEventListener("visibilitychange", function () {
-  if (document.hidden) releaseKeys();
+  if (document.hidden) { releaseKeys(); pauseGame(); }
 });
 
 const rankForm = document.getElementById("rankForm");
@@ -312,6 +348,17 @@ function makeSound(source, volume) {
     return sound;
   } catch { return null; }
 }
+function startBackgroundMusic() {
+  if (isMuted || gameState !== "playing" || !backgroundMusic || backgroundMusic.unavailable) return;
+  try {
+    const playback = backgroundMusic.play();
+    if (playback && typeof playback.catch === "function") playback.catch(() => {});
+  } catch { /* 음원 오류가 게임 진행을 막지 않습니다. */ }
+}
+function stopBackgroundMusic() {
+  if (!backgroundMusic) return;
+  try { backgroundMusic.pause(); backgroundMusic.currentTime = 0; } catch {}
+}
 function playSound(name) {
   const sound = soundEffects[name];
   if (isMuted || !sound || sound.unavailable) return;
@@ -399,6 +446,7 @@ function checkEnemyCollisions(now) {
       lastHitTime = now;
       if (health === 0) {
         gameState = "gameover";
+        stopBackgroundMusic();
         updateHighScore();
         gameOverMessage = pickEndMessage();
         if (rankingReady()) loadLeaderboard();
@@ -584,7 +632,7 @@ vignette.addColorStop(0,"#00000000");vignette.addColorStop(1,"#00000035");
 ctx.fillStyle=vignette;ctx.fillRect(camera.x,camera.y+99,800,428);
 
 // 그림과 같은 카메라 변환 안에서 판정 영역을 그립니다.
-drawHitFeedback(Date.now());
+drawHitFeedback(gameNow());
 drawHitboxes();
 
 // 저해상도 월드를 두 배로 확대합니다. HUD는 화면에 고정합니다.
@@ -603,12 +651,12 @@ line(414,22,414,77,"#303a43");
 label("SCORE",438,30,9);label(String(score).padStart(4, "0"),437,59,25,"#e9efea","bold");
 label("BEST " + highScore,546,82,10,"#bddc8e");
 label("SURVIVAL",546,30,9);label(formatTime(elapsedSeconds),545,59,25,"#e9efea","bold");
-const recentlyHit = lastHitTime !== null && Date.now() - lastHitTime < 700;
+const recentlyHit = lastHitTime !== null && gameNow() - lastHitTime < 700;
 label(recentlyHit ? "DAMAGE -1" : "VITALS",667,30,9,recentlyHit ? "#ff8395" : "#9cabb6");label(health + " / " + maxHealth,739,30,9,recentlyHit ? "#ff8395" : "#94c9a4");
 for(let i=0;i<3;i++) {
   polygon([[667+i*34,42],[693+i*34,42],[689+i*34,58],[663+i*34,58]],i < health ? "#83c6a0" : "#293a36");
 }
-label(gameState === "playing" && Date.now() < invincibleUntil ? "SHIELD ACTIVE" : "FIELD STATUS",25,550,9,"#83c6a0");
+label(gameState === "playing" && gameNow() < invincibleUntil ? "SHIELD ACTIVE" : "FIELD STATUS",25,550,9,"#83c6a0");
 label("DRONE " + enemies.filter(e => e.active).length,130,550,11,"#f49aaf");label("에너지 +10",205,550,11,"#bddc8e");
 label("회복 코어 " + (collectedCoreCount % 5) + "/5 · 피격 후 1초 무적",310,550,11,"#9bafae");
 ctx.textAlign="right";label("OPEN WORLD / SURVIVAL",775,550,9,"#738a91");ctx.textAlign="left";
@@ -717,6 +765,8 @@ function formatTime(seconds) {
 }
 // 새 루프를 만들지 않고, 이번 판의 값만 처음 상태로 되돌립니다.
 function resetGame() {
+  stopBackgroundMusic();
+  pauseStartedAt = 0; pausedDuration = 0; resumeDeadline = 0;
   showNicknameForm(false);
   runId += 1; rankSubmitted = false; rankSubmitting = false; showLeaderboard = false;
   isNewRecord = false;
@@ -746,6 +796,7 @@ function resetGame() {
   updateCamera();
   updateMapItems();
   gameState = "playing";
+  startBackgroundMusic();
 }
 function drawStartScreen() {
   ctx = screenCtx;
@@ -821,15 +872,30 @@ function updateCamera() {
 
 
 // 그리는 순서를 한곳에서 확인합니다. 상태별 동작은 그대로입니다.
+function drawPauseScreen() {
+  ctx = screenCtx; ctx.save(); ctx.fillStyle = "rgba(3,10,16,.86)"; ctx.fillRect(0,99,800,428);
+  ctx.textAlign = "center";
+  label(gameState === "paused" ? "PAUSED" : String(Math.max(1, Math.ceil((resumeDeadline - Date.now()) / 1000))),400,285,56,"#e8d389","bold");
+  label(gameState === "paused" ? "P / ESC 또는 재개 버튼" : "준비하세요",400,345,18,"#e5ebe6");
+  ctx.restore();
+}
 function draw() {
   drawScene();
   if (gameState === "start") drawStartScreen();
   if (gameState === "gameover") drawGameOver();
+  if (gameState === "paused" || gameState === "countdown") drawPauseScreen();
+  const pauseButton = document.getElementById("pauseButton");
+  pauseButton.disabled = !["playing", "paused"].includes(gameState);
+  pauseButton.textContent = gameState === "paused" ? "▶ 재개" : "Ⅱ 일시정지";
   drawDebugInfo();
   drawLeaderboard();
 }
 
 function gameLoop(timestamp) {
+  if (gameState === "countdown" && Date.now() >= resumeDeadline) {
+    pausedDuration += Date.now() - pauseStartedAt; pauseStartedAt = 0;
+    gameState = "playing"; releaseKeys(); startBackgroundMusic();
+  }
   // ① 지우기: 화면과 저해상도 월드의 지난 프레임을 없앱니다.
   worldCtx.setTransform(1, 0, 0, 1, 0, 0);
   worldCtx.clearRect(0, 0, worldCanvas.width, worldCanvas.height);
@@ -837,7 +903,7 @@ function gameLoop(timestamp) {
 
   // ② 계산: 드론 위치와 표시할 모션 프레임을 갱신합니다.
   if (gameState === "playing") {
-    const now = Date.now();
+    const now = gameNow();
     if (startTime === null) startTime = now;
     elapsedSeconds = Math.max(0, Math.floor((now - startTime) / 1000));
     updatePlayer();
@@ -876,3 +942,55 @@ for (const [image, path] of [
   image.onerror = finishImageLoad;
   image.src = path;
 }
+
+// 오락기 메뉴: 방향키로 선택하고 START / Enter로 실행합니다.
+let selectedMenuGame = 0;
+const menuGames = [
+  {id:"selectNeon", title:"NEON SURVIVOR", description:"드론을 피해 코어를 모으세요", ready:true},
+  {id:"selectVoid", title:"VOID DODGER", description:"우주 회피 게임 · 준비 중", ready:false},
+  {id:"selectCyber", title:"CYBER ESCAPE", description:"사이버 탈출 게임 · 준비 중", ready:false}
+];
+function selectMenuGame(step) {
+  selectedMenuGame = (selectedMenuGame + step + menuGames.length) % menuGames.length;
+  menuGames.forEach((game, i) => {
+    const button = document.getElementById(game.id);
+    button.classList.toggle("selected", i === selectedMenuGame);
+    button.setAttribute("aria-pressed", String(i === selectedMenuGame));
+  });
+  const game = menuGames[selectedMenuGame];
+  const preview = document.getElementById("menuPreview");
+  preview.querySelector("span").textContent = game.title;
+  preview.classList.toggle("pending", !game.ready);
+  document.getElementById("menuDescription").textContent = game.description;
+  document.getElementById("menuAvailability").textContent = game.ready ? "SURVIVAL · 1 PLAYER" : "COMING SOON";
+  document.getElementById("menuStatus").textContent = "↑ ↓ SELECT　 ENTER START";
+}
+function launchMenuGame() {
+  if (!menuGames[selectedMenuGame].ready) {
+    document.getElementById("menuStatus").textContent = "준비 중입니다 · 다른 게임을 선택해 주세요";
+    return;
+  }
+  document.getElementById("arcadeMenu").hidden = true;
+  document.getElementById("gameConsole").hidden = false;
+  if (gameState === "paused") resumeGame();
+  else if (gameState === "start" || gameState === "gameover") resetGame();
+  canvas.focus();
+}
+menuGames.forEach((game, i) => document.getElementById(game.id).addEventListener("click", function () {
+  selectMenuGame(i - selectedMenuGame);
+}));
+document.getElementById("menuUp").addEventListener("click", () => selectMenuGame(-1));
+document.getElementById("menuDown").addEventListener("click", () => selectMenuGame(1));
+document.getElementById("arcadeStart").addEventListener("click", launchMenuGame);
+document.getElementById("pauseButton").addEventListener("click", function () {
+  if (gameState === "playing") pauseGame(); else resumeGame();
+  canvas.focus();
+});
+document.getElementById("menuButton").addEventListener("click", function () {
+  pauseGame(); showNicknameForm(false);
+  document.getElementById("arcadeMenu").hidden = false;
+  document.getElementById("gameConsole").hidden = true;
+  selectMenuGame(-selectedMenuGame);
+  document.getElementById("menuStatus").textContent = gameState === "paused" ? "START를 눌러 이전 게임으로 돌아가기" : "↑ ↓ SELECT　 ENTER START";
+  document.getElementById("arcadeStart").focus();
+});

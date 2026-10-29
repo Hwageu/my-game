@@ -4,15 +4,39 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NEON SURVIVOR</title>
-  <link rel="stylesheet" href="style.css?v=20261029-final">
+  <link rel="stylesheet" href="style.css?v=20261029-cabinet">
 </head>
 <body>
-  <main class="console" aria-label="네온 서바이벌 레트로 게임 화면">
+  <section id="arcadeMenu" class="arcade-menu" aria-label="게임 선택">
+    <header class="marquee"><span>1 PLAYER • MULTI GAME SYSTEM</span><h1>NEON<span>ARCADE</span></h1></header>
+    <div class="speaker-bar" aria-hidden="true"><span></span><b>GAME SELECT SYSTEM</b><span></span></div>
+    <div class="cabinet-screen">
+      <div class="menu-crt">
+        <div class="screen-score"><span>1UP</span><span>FREE PLAY</span><span>HI-SCORE</span></div>
+        <h2>SELECT GAME</h2>
+        <div class="select-layout"><div class="game-list" role="group" aria-label="게임 목록">
+          <button id="selectNeon" class="game-option selected" aria-pressed="true"><span>01</span>NEON<br>SURVIVOR</button>
+          <button id="selectVoid" class="game-option" aria-pressed="false"><span>02</span>VOID<br>DODGER</button>
+          <button id="selectCyber" class="game-option" aria-pressed="false"><span>03</span>CYBER<br>ESCAPE</button>
+        </div><div class="game-preview"><div id="menuPreview" class="preview-picture"><span>NEON<br>SURVIVOR</span></div><p id="menuDescription">드론을 피해 코어를 모으세요</p><small id="menuAvailability">SURVIVAL · 1 PLAYER</small></div></div>
+        <p id="menuStatus" class="menu-status" role="status" aria-live="polite">↑ ↓ SELECT　 ENTER START</p>
+        <div class="screen-credit"><span>CREDIT 00</span><span>NO COIN REQUIRED</span></div>
+      </div>
+    </div>
+    <div class="control-deck">
+      <div class="stick-control"><span class="player-label">1 PLAYER</span><button id="menuUp" aria-label="이전 게임">▲</button><span class="joystick" aria-hidden="true"></span><button id="menuDown" aria-label="다음 게임">▼</button></div>
+      <div class="start-control"><button id="arcadeStart" aria-label="선택한 게임 시작">START</button><span>GAME START</span></div>
+      <div class="action-buttons" aria-hidden="true"><i>A</i><i>B</i><i>C</i><i>D</i></div>
+    </div>
+    <div class="cabinet-front" aria-hidden="true"><div class="coin-door"><span>COIN</span><i></i><b>25¢</b><div></div></div><span class="cabinet-badge">NEON<br><b>ARCADE SYSTEM</b></span></div>
+  </section>
+  <main id="gameConsole" hidden class="console" aria-label="네온 서바이벌 레트로 게임 화면">
     <div class="console-header" aria-hidden="true"><span class="console-logo">NEON <b>SURVIVOR</b></span><span class="console-model">SURVIVAL SYSTEM</span></div>
     <div class="crt-screen">
       <canvas tabindex="0" id="game" width="800" height="600" aria-label="네온 서바이벌 게임 화면">Canvas를 지원하는 브라우저에서 열어 주세요.</canvas>
     </div>
     <div class="console-footer" aria-hidden="true"><span class="power-light"></span><span>POWER</span><span class="vent"></span><span>NS · 01</span></div>
+    <nav class="game-controls" aria-label="게임 제어"><button id="menuButton">← 게임 선택</button><button id="pauseButton" disabled>Ⅱ 일시정지</button><span>P / ESC · M 음소거</span></nav>
     <p class="platform-note">PC에서 방향키로 플레이해 주세요. 휴대폰에서는 화면·소리 확인이 가능하며 터치 이동은 지원하지 않습니다.</p>
   </main>
   <form id="rankForm" hidden>
@@ -21,6 +45,6 @@
     <p id="rankPrivacy">실명·학번·연락처를 입력하지 마세요. 닉네임과 점수가 공개됩니다.</p>
     <button type="submit">기록 등록</button><button type="button" id="cancelRank">취소</button>
   </form>
-  <script src="script.js?v=20261029-final"></script>
+  <script src="script.js?v=20261029-cabinet"></script>
 </body>
 </html>

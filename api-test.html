@@ -1,4 +1,0 @@
-<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>fetch 실습</title><style>body{background:#101a21;color:#e0e9e0;font:16px monospace;padding:20px}pre{white-space:pre-wrap}button{padding:10px}</style><h1>키 없는 API 실습</h1><p>공개 저장소 정보만 읽습니다. 네트워크를 끊고 다시 눌러 실패 처리를 비교하세요.</p><button id="load">공개 저장소 정보 읽기</button><pre id="result">아직 요청하지 않았습니다.</pre><script>
-async function getData(){const output=document.getElementById('result');output.textContent='불러오는 중...';try{const response=await fetch('https://api.github.com/repos/Hwageu/my-game');if(!response.ok)throw Error('HTTP '+response.status);const data=await response.json();output.textContent=JSON.stringify({name:data.full_name,description:data.description},null,2);console.log('공개 API 결과:',data);}catch{output.textContent='요청 실패: 인터넷 연결을 확인하세요. 본 게임은 계속 실행할 수 있습니다.';}}
-document.getElementById('load').onclick=getData;
-</script></html>
