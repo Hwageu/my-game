@@ -58,3 +58,11 @@ body {background:radial-gradient(ellipse at 50% 40%,#343030,#171717 65%);}
 .stick-ball {left:5px;width:37px;height:37px;}
 .stick-control button {top:65px;}
 @media(max-width:600px){.control-deck{min-height:143px;}.menu-status{overflow-wrap:anywhere;}.game-option{letter-spacing:0;}}
+
+/* Keep the pivot seated on the base while only the shaft and ball tilt. */
+.joystick {top:30px;height:80px;isolation:isolate;overflow:visible;}
+.stick-base {z-index:1;}
+.stick-arm {position:absolute;left:0;bottom:0;width:46px;height:70px;z-index:2;transform-origin:23px 61px;transform:skewX(var(--stick-lean,0deg)) scaleY(var(--stick-reach,1));transition:transform 90ms ease-out;pointer-events:none;}
+.stick-shaft {left:19px;top:22px;width:8px;height:40px;z-index:1;}
+.stick-ball {left:6px;top:0;width:35px;height:35px;z-index:2;}
+@media(prefers-reduced-motion:reduce){.stick-arm{transition:none;}}

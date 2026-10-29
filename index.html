@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NEON SURVIVOR</title>
-  <link rel="stylesheet" href="style.css?v=20261029-stick">
+  <link rel="stylesheet" href="style.css?v=20261029-stick-motion">
 </head>
 <body>
   <section id="arcadeCabinet" class="arcade-menu" aria-label="네온 아케이드 오락기">
@@ -26,7 +26,7 @@
     </div>
     <nav class="game-controls" aria-label="게임 제어"><button id="menuButton" disabled>게임 선택</button><button id="pauseButton" disabled>Ⅱ 일시정지</button><span>P / ESC · M 음소거</span></nav>
     <div class="control-deck">
-      <div class="stick-control"><span class="player-label">1 PLAYER</span><button id="menuUp" aria-label="이전 게임">▲</button><span class="joystick" aria-hidden="true"><i class="stick-base"></i><i class="stick-shaft"></i><i class="stick-ball"></i></span><button id="menuDown" aria-label="다음 게임">▼</button></div>
+      <div class="stick-control"><span class="player-label">1 PLAYER</span><button id="menuUp" aria-label="이전 게임">▲</button><span class="joystick" aria-hidden="true"><i class="stick-base"></i><span class="stick-arm"><i class="stick-shaft"></i><i class="stick-ball"></i></span></span><button id="menuDown" aria-label="다음 게임">▼</button></div>
       <div class="start-control"><button id="arcadeStart" aria-label="게임 시작 또는 일시정지">START</button><span>START / PAUSE</span></div>
       <div class="action-buttons" aria-hidden="true"><i>A</i><i>B</i><i>C</i><i>D</i></div>
     </div>
@@ -39,6 +39,6 @@
     <p id="rankPrivacy">실명·학번·연락처를 입력하지 마세요. 닉네임과 점수가 공개됩니다.</p>
     <button type="submit">기록 등록</button><button type="button" id="cancelRank">취소</button>
   </form>
-  <script src="script.js?v=20261029-stick"></script>
+  <script src="script.js?v=20261029-stick-motion"></script>
 </body>
 </html>

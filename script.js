@@ -36,6 +36,8 @@ let showHitbox = showDebug;
 // 직접 튜닝할 플레이어 속도입니다. 드론 속도와 별개입니다.
 let playerSpeed = 2;
 const keys = {};
+const joystickKeys = {};
+const joystick = document.querySelector(".joystick");
 // camera는 월드에서 화면 왼쪽 위가 가리키는 위치입니다.
 const camera = { x: 0, y: 0 };
 let walkFrame = 0;
@@ -130,6 +132,11 @@ let pendingImages = 6;
 // 방식 B: 이벤트에서는 키 상태만 기록하고, 위치 계산은 루프에서 합니다.
 const controlKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "];
 document.addEventListener("keydown", function (e) {
+  if (e.key.startsWith("Arrow") && !["INPUT", "TEXTAREA"].includes(e.target?.tagName) &&
+      !e.ctrlKey && !e.metaKey && !e.altKey) {
+    joystickKeys[e.key] = true;
+    updateJoystick();
+  }
   if (!document.getElementById("arcadeMenu").hidden) {
     if (["ArrowUp", "ArrowDown", "Enter", " "].includes(e.key)) {
       e.preventDefault();
@@ -200,6 +207,10 @@ canvas.addEventListener("pointerdown", function () {
 });
 
 document.addEventListener("keyup", function (e) {
+  if (e.key.startsWith("Arrow")) {
+    joystickKeys[e.key] = false;
+    updateJoystick();
+  }
   if (controlKeys.includes(e.key)) {
     e.preventDefault();
     keys[e.key] = false;
@@ -835,8 +846,18 @@ function drawGameOver() {
   ctx.restore();
 }
 
+function updateJoystick() {
+  if (!joystick) return;
+  const x = Number(!!joystickKeys.ArrowRight) - Number(!!joystickKeys.ArrowLeft);
+  const y = Number(!!joystickKeys.ArrowDown) - Number(!!joystickKeys.ArrowUp);
+  const length = Math.max(1, Math.hypot(x, y));
+  joystick.style.setProperty("--stick-lean", (-x / length * 16) + "deg");
+  joystick.style.setProperty("--stick-reach", String(1 - y / length * 0.16));
+}
 function releaseKeys() {
   for (const key of Object.keys(keys)) keys[key] = false;
+  for (const key of Object.keys(joystickKeys)) joystickKeys[key] = false;
+  updateJoystick();
 }
 
 function updatePlayer() {
