@@ -892,6 +892,11 @@ function draw() {
 }
 
 function gameLoop(timestamp) {
+  // 메뉴에서는 보이지 않는 게임 화면을 반복해서 그리지 않습니다.
+  if (!document.getElementById("arcadeMenu").hidden) {
+    requestAnimationFrame(gameLoop);
+    return;
+  }
   if (gameState === "countdown" && Date.now() >= resumeDeadline) {
     pausedDuration += Date.now() - pauseStartedAt; pauseStartedAt = 0;
     gameState = "playing"; releaseKeys(); startBackgroundMusic();
