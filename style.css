@@ -53,3 +53,8 @@ canvas { background: #07111a; display: block; width: 100%; height: auto; image-r
   .crt-screen { border-width: 5px; border-radius: 9px; }
   .console-footer { height: 35px; font-size: 8px; }
 }
+
+/* 모바일에서는 게임 좌표를 유지하고 표시 크기만 줄입니다. */
+canvas { max-width: 100%; }
+.platform-note { margin: 0 0 18px; font-size: 12px; line-height: 1.7; color: #c3cbbb; text-align: center; letter-spacing: 0; }
+@media (max-width: 600px) { .platform-note { font-size: 11px; } }

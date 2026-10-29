@@ -613,6 +613,7 @@ function drawStartScreen() {
   label("체력 3 · 피격 후 1초 무적 · 게임 오버 후 R 재시작",400,345,13,"#9bafae");
   label("M: 음소거 켜기 / 끄기",400,377,13,"#9bafae");
   label("최고 점수: " + highScore,400,400,13,"#bddc8e");
+  label("PC에서 방향키로 플레이해 주세요 · 터치 이동 미지원",400,463,11,"#9bafae");
   label("아무 키나 누르거나 화면을 클릭해 시작",400,440,17,"#e5ebe6","bold");
   ctx.restore();
 }
