@@ -851,8 +851,8 @@ function updateJoystick() {
   const x = Number(!!joystickKeys.ArrowRight) - Number(!!joystickKeys.ArrowLeft);
   const y = Number(!!joystickKeys.ArrowDown) - Number(!!joystickKeys.ArrowUp);
   const length = Math.max(1, Math.hypot(x, y));
-  joystick.style.setProperty("--stick-lean", (-x / length * 16) + "deg");
-  joystick.style.setProperty("--stick-reach", String(1 - y / length * 0.16));
+  joystick.style.setProperty("--stick-x", (x / length * 8) + "px");
+  joystick.style.setProperty("--stick-y", (y / length * 8) + "px");
 }
 function releaseKeys() {
   for (const key of Object.keys(keys)) keys[key] = false;

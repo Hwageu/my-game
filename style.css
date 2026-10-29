@@ -43,7 +43,6 @@ body {background:radial-gradient(ellipse at 50% 40%,#343030,#171717 65%);}
 .joystick {position:absolute;display:block;left:16px;top:23px;width:46px;height:62px;background:none;border-radius:0;box-shadow:none;z-index:auto;}
 .joystick::after {content:none;}
 .stick-base {position:absolute;left:0;bottom:0;width:46px;height:19px;border-radius:50%;background:radial-gradient(ellipse at 50% 40%,#454545 0 25%,#222 30% 55%,#0b0b0b 60%);box-shadow:0 3px 2px #0007,inset 0 1px #6d5b54;}
-.stick-shaft {position:absolute;left:20px;top:21px;width:7px;height:30px;border-radius:2px;background:linear-gradient(90deg,#38393a,#d5d0ca 40%,#97938d 65%,#3a3b3b);box-shadow:3px 2px 3px #0004;}
 .stick-ball {position:absolute;left:7px;top:0;width:33px;height:33px;border-radius:50%;background:radial-gradient(circle at 32% 25%,#fba59a 0,#e04c3d 20%,#b1241a 55%,#6b130d 90%);box-shadow:inset -2px -3px 4px #49090080,1px 2px 3px #0008;}
 @media(max-width:600px){body{padding:20px 8px;}.game-crt{border-radius:23px;aspect-ratio:auto;height:auto;}.game-crt canvas{aspect-ratio:4/3;height:auto;}.menu-crt{aspect-ratio:4/3;min-height:270px;}.game-crt{min-height:270px;display:grid;align-items:center;}.stick-control{width:65px;}.joystick{left:10px;}.game-controls{flex-wrap:nowrap;gap:6px;}.game-controls button{font-size:8px;padding:5px;}.game-controls span{font-size:7px;}.start-control>span{font-size:6px;}}
 
@@ -54,7 +53,6 @@ body {background:radial-gradient(ellipse at 50% 40%,#343030,#171717 65%);}
 .control-deck {min-height:148px;}
 .stick-control {height:120px;}
 .joystick {top:38px;height:75px;}
-.stick-shaft {left:20px;top:26px;width:8px;height:38px;}
 .stick-ball {left:5px;width:37px;height:37px;}
 .stick-control button {top:65px;}
 @media(max-width:600px){.control-deck{min-height:143px;}.menu-status{overflow-wrap:anywhere;}.game-option{letter-spacing:0;}}
@@ -63,6 +61,11 @@ body {background:radial-gradient(ellipse at 50% 40%,#343030,#171717 65%);}
 .joystick {top:30px;height:80px;isolation:isolate;overflow:visible;}
 .stick-base {z-index:1;}
 .stick-arm {position:absolute;left:0;bottom:0;width:46px;height:70px;z-index:2;transform-origin:23px 61px;transform:skewX(var(--stick-lean,0deg)) scaleY(var(--stick-reach,1));transition:transform 90ms ease-out;pointer-events:none;}
-.stick-shaft {left:19px;top:22px;width:8px;height:40px;z-index:1;}
 .stick-ball {left:6px;top:0;width:35px;height:35px;z-index:2;}
 @media(prefers-reduced-motion:reduce){.stick-arm{transition:none;}}
+
+/* Top view: ball moves over a circular socket; no exposed shaft. */
+.joystick {top:44px;width:50px;height:50px;}
+.stick-base {left:0;top:0;bottom:auto;width:50px;height:50px;border-radius:50%;background:radial-gradient(circle,#090909 0 28%,#252525 30% 48%,#48433f 50% 54%,#161515 57% 68%,#080808 71%);box-shadow:0 2px 3px #0007,inset 0 1px 1px #8d6f5a;}
+.stick-arm {left:0;top:0;bottom:auto;width:50px;height:50px;transform-origin:center;transform:translate(var(--stick-x,0px),var(--stick-y,0px));}
+.stick-ball {left:10px;top:10px;width:30px;height:30px;background:radial-gradient(circle at 34% 28%,#f48b77 0,#da4432 24%,#a52319 62%,#68110c 95%);box-shadow:0 3px 4px #0009,inset 1px 1px 2px #ffb59b55;}
