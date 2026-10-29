@@ -670,6 +670,14 @@ function updateCamera() {
 // ===== ⑤. 게임 루프 — 지우기 / 계산 / 그리기 =====
 
 
+// 그리는 순서를 한곳에서 확인합니다. 상태별 동작은 그대로입니다.
+function draw() {
+  drawScene();
+  if (gameState === "start") drawStartScreen();
+  if (gameState === "gameover") drawGameOver();
+  drawDebugInfo();
+}
+
 function gameLoop(timestamp) {
   // ① 지우기: 화면과 저해상도 월드의 지난 프레임을 없앱니다.
   worldCtx.setTransform(1, 0, 0, 1, 0, 0);
@@ -694,10 +702,7 @@ function gameLoop(timestamp) {
   }
 
   // ③ 그리기: 배경, 캐릭터, 아이템, HUD를 다시 그립니다.
-  drawScene();
-  if (gameState === "start") drawStartScreen();
-  if (gameState === "gameover") drawGameOver();
-  drawDebugInfo();
+  draw();
 
   // ④ 다음 프레임 예약: 루프는 이 한 곳에서만 반복합니다.
   requestAnimationFrame(gameLoop);
