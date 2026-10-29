@@ -103,7 +103,7 @@ const soundEffects = {
   hit: makeSound("assets/hit.wav", 0.5),
   gameover: makeSound("assets/gameover.wav", 0.45)
 };
-const backgroundMusic = makeSound("assets/ambience.wav", 0.16);
+const backgroundMusic = makeSound("assets/ambience.wav", 0.65);
 if (backgroundMusic) backgroundMusic.loop = true;
 
 // 개수만 바꾸면 이동·그리기 반복문을 고치지 않아도 됩니다.
@@ -977,24 +977,37 @@ function launchMenuGame() {
   }
   document.getElementById("arcadeMenu").hidden = true;
   document.getElementById("gameConsole").hidden = false;
+  document.getElementById("menuButton").disabled = false;
+  document.getElementById("menuUp").disabled = true;
+  document.getElementById("menuDown").disabled = true;
   if (gameState === "paused") resumeGame();
   else if (gameState === "start" || gameState === "gameover") resetGame();
-  canvas.focus();
+  canvas.focus({ preventScroll: true });
 }
 menuGames.forEach((game, i) => document.getElementById(game.id).addEventListener("click", function () {
   selectMenuGame(i - selectedMenuGame);
 }));
 document.getElementById("menuUp").addEventListener("click", () => selectMenuGame(-1));
 document.getElementById("menuDown").addEventListener("click", () => selectMenuGame(1));
-document.getElementById("arcadeStart").addEventListener("click", launchMenuGame);
+document.getElementById("arcadeStart").addEventListener("click", function () {
+  if (!document.getElementById("arcadeMenu").hidden) launchMenuGame();
+  else if (gameState === "playing") pauseGame();
+  else if (gameState === "paused") resumeGame();
+  else if (gameState === "gameover") resetGame();
+  canvas.focus({ preventScroll: true });
+});
 document.getElementById("pauseButton").addEventListener("click", function () {
   if (gameState === "playing") pauseGame(); else resumeGame();
-  canvas.focus();
+  canvas.focus({ preventScroll: true });
 });
 document.getElementById("menuButton").addEventListener("click", function () {
   pauseGame(); showNicknameForm(false);
   document.getElementById("arcadeMenu").hidden = false;
   document.getElementById("gameConsole").hidden = true;
+  document.getElementById("menuButton").disabled = true;
+  document.getElementById("pauseButton").disabled = true;
+  document.getElementById("menuUp").disabled = false;
+  document.getElementById("menuDown").disabled = false;
   selectMenuGame(-selectedMenuGame);
   document.getElementById("menuStatus").textContent = gameState === "paused" ? "START를 눌러 이전 게임으로 돌아가기" : "↑ ↓ SELECT　 ENTER START";
   document.getElementById("arcadeStart").focus();

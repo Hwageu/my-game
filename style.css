@@ -1,68 +1,14 @@
-* { box-sizing: border-box; }
-body {
-  margin: 0;
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: 32px 18px;
-  color: #c3c1b4;
-  font-family: "Courier New", monospace;
-  background: repeating-linear-gradient(135deg, #ffffff02 0 1px, transparent 1px 5px), radial-gradient(ellipse at 50% 35%, #363a39, #111516 75%);
-}
-.console {
-  width: min(880px, 100%);
-  padding: 0 30px;
-  border: 1px solid #63675f;
-  border-bottom: 7px solid #202622;
-  border-radius: 24px 24px 30px 30px;
-  background: linear-gradient(115deg, #474d45, #343a33 45%, #30362f);
-  box-shadow: inset 0 2px 2px #d5d4b933, inset 0 -2px 4px #0009, 0 36px 80px #0009, 0 3px 0 3px #121713;
-}
-.console-header, .console-footer { display: flex; align-items: center; }
-.console-header { min-height: 63px; justify-content: space-between; gap: 12px; }
-.console-logo { font-size: 13px; font-weight: bold; letter-spacing: 3px; color: #d4d2b8; }
-.console-logo b { color: #a9b4a1; font-weight: normal; }
-.console-model { font-size: 9px; letter-spacing: 2px; color: #a6aa98; }
-.crt-screen {
-  position: relative;
-  overflow: hidden;
-  border: 9px solid #171d18;
-  border-radius: 17px;
-  background: #050a09;
-  box-shadow: 0 0 0 2px #777d6633, 0 3px 0 #a0a58b33, inset 0 0 20px #000;
-}
-.crt-screen::after {
-  content: "";
-  pointer-events: none;
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: repeating-linear-gradient(to bottom, transparent 0 3px, #00000012 3px 4px), linear-gradient(125deg, #d2ecd206, transparent 35%, transparent 75%, #02080210);
-  box-shadow: inset 0 0 26px 4px #0005;
-}
-canvas { background: #07111a; display: block; width: 100%; height: auto; image-rendering: pixelated; }
-.console-footer { height: 49px; gap: 9px; font-size: 9px; letter-spacing: 2px; color: #b1b49f; }
-.power-light { width: 6px; height: 6px; border-radius: 50%; background: #cf9756; box-shadow: 0 0 6px #d6976666; }
-.vent { height: 14px; width: 95px; margin-left: auto; margin-right: 14px; background: repeating-linear-gradient(90deg, #1e251f 0 3px, transparent 3px 7px); }
-@media (max-width: 600px) {
-  body { padding: 20px 8px; }
-  .console { padding: 0 10px; border-radius: 16px; }
-  .console-header { min-height: 45px; }
-  .console-logo { font-size: 10px; letter-spacing: 1px; }
-  .console-model { font-size: 7px; letter-spacing: 0; }
-  .crt-screen { border-width: 5px; border-radius: 9px; }
-  .console-footer { height: 35px; font-size: 8px; }
-}
-
-/* 모바일에서는 게임 좌표를 유지하고 표시 크기만 줄입니다. */
-canvas { max-width: 100%; }
-.platform-note { margin: 0 0 18px; font-size: 12px; line-height: 1.7; color: #c3cbbb; text-align: center; letter-spacing: 0; }
-@media (max-width: 600px) { .platform-note { font-size: 11px; } }
-
-#rankForm {position:fixed;z-index:10;top:50%;left:50%;transform:translate(-50%,-50%);width:min(400px,90vw);padding:24px;background:#101c22;border:2px solid #83c6a0;border-radius:12px;box-shadow:0 0 0 100vmax #0009;}
-#rankForm
+* {box-sizing:border-box;}
+body {margin:0;min-height:100vh;display:grid;place-items:center;padding:32px 18px;color:#c3c1b4;font-family:"Courier New",monospace;}
 [hidden] {display:none !important;}
 button {font:inherit;}
+button:focus-visible {outline:2px solid #efd788;outline-offset:3px;}
+canvas {display:block;width:100%;height:100%;image-rendering:pixelated;background:#07111a;}
+.platform-note {margin:0;padding:10px 0 12px;font-size:10px;text-align:center;color:#a79d91;line-height:1.5;}
+#rankForm {position:fixed;z-index:10;top:50%;left:50%;transform:translate(-50%,-50%);width:min(400px,90vw);padding:24px;background:#101c22;border:2px solid #83c6a0;border-radius:12px;box-shadow:0 0 0 100vmax #0009;}
+#rankForm input {display:block;width:100%;margin:12px 0;padding:12px;background:#07111a;color:#e5ebe6;border:1px solid #83c6a0;font:inherit;}
+#rankForm button {padding:10px 18px;margin-right:8px;background:#83c6a0;color:#101a21;border:0;border-radius:4px;font:inherit;cursor:pointer;}
+#rankPrivacy {font-size:12px;line-height:1.6;}
 /* Upright cabinet: marquee, recessed CRT, sloped deck and metal coin door. */
 body {background:radial-gradient(ellipse at 50% 40%,#343030,#171717 65%);}
 .arcade-menu {position:relative;width:min(680px,100%);padding:18px 28px 0;border:7px solid #131313;border-radius:7px 7px 0 0;background:#252426;box-shadow:inset 3px 0 #595457,inset -3px 0 #070707,12px 20px 0 #080808,0 40px 80px #0009;}
@@ -82,3 +28,33 @@ body {background:radial-gradient(ellipse at 50% 40%,#343030,#171717 65%);}
 .cabinet-front{display:flex;align-items:center;justify-content:space-around;min-height:130px;padding:12px 20px 20px;background:linear-gradient(90deg,#242124,#171719 70%);border-top:2px solid #555;}.coin-door{position:relative;width:95px;height:95px;background:#151515;border:3px solid #050505;border-radius:5px;box-shadow:1px 1px #515151,inset 2px 2px #242424;text-align:center;padding-top:8px;}.coin-door>span{font-size:7px;color:#aaa;letter-spacing:2px;}.coin-door i{display:block;margin:5px auto;width:25px;height:21px;border:3px solid #6c2920;background:#e95527;box-shadow:0 0 8px #e9482520;}.coin-door b{font-size:8px;color:#c4bda9;}.coin-door>div{width:48px;height:13px;margin:6px auto;background:#060606;border:2px solid #242424;}.cabinet-badge {font-family:Impact,sans-serif;font-style:italic;font-size:26px;color:#b5aaa0;line-height:.8;}.cabinet-badge b{font:7px 'Courier New',monospace;letter-spacing:2px;}
 .game-controls{display:flex;align-items:center;gap:10px;margin:0 0 16px;}.game-controls button{background:#19241f;color:#d9dfcc;border:1px solid #7e937e;padding:10px;cursor:pointer;border-radius:4px;}.game-controls button:disabled{opacity:.45;cursor:default;}.game-controls span{font-size:10px;margin-left:auto;}
 @media(max-width:600px){.arcade-menu{padding:10px 13px 0;border-width:5px;box-shadow:5px 10px #080808,0 20px 40px #0008;}.marquee{border-width:5px;}.marquee>span{font-size:6px;letter-spacing:1px;}.speaker-bar{height:28px;gap:9px;}.speaker-bar b{font-size:6px;letter-spacing:0;}.cabinet-screen{padding:12px 10px 15px;border-radius:24px;}.menu-crt{padding:13px 14px 10px;aspect-ratio:auto;min-height:270px;border-radius:23px;}.menu-crt h2{margin:15px 0;}.screen-score{font-size:7px;letter-spacing:0;}.game-list{gap:11px;}.game-option{padding-left:26px;font-size:12px;}.game-option>span{left:5px;}.preview-picture{height:110px;}.preview-picture span{font-size:12px;}.game-preview p{font-size:8px;}.game-preview small{font-size:7px;}.menu-status{font-size:8px;margin:16px 0;}.screen-credit{font-size:6px;letter-spacing:0;}.control-deck{gap:10px;padding:9px 12px 16px;margin:7px -7px 0;min-height:105px;}.action-buttons{gap:3px;}.action-buttons i{width:23px;height:23px;font-size:7px;}.stick-control{width:55px;}.start-control>span{font-size:6px;}.cabinet-front{min-height:110px;}.coin-door{width:80px;height:88px;}.game-controls{flex-wrap:wrap;}.game-controls span{font-size:9px;}}
+
+/* Both views use the very same CRT aperture and cabinet shell. */
+.game-crt {position:relative;overflow:hidden;width:100%;aspect-ratio:4/3;border:2px solid #30353b;border-radius:38px / 25px;background:#07111a;box-shadow:inset 0 0 30px #000,0 0 9px #6f87bf15;}
+.game-crt::after {content:"";position:absolute;inset:0;pointer-events:none;border-radius:inherit;background:repeating-linear-gradient(transparent 0 2px,#00000012 2px 3px);box-shadow:inset 0 0 18px #0008;}
+.game-controls {min-height:33px;margin:7px 0 0;gap:10px;}
+.game-controls button {padding:5px 9px;font-size:9px;border:1px solid #5a5550;border-radius:2px;background:#191818;color:#d5c9b4;}
+.game-controls span {font-size:8px;color:#a89c8a;}
+.stick-control {height:91px;width:78px;flex-shrink:0;display:block;}
+.player-label {display:block;text-align:center;font-size:8px;}
+.stick-control button {position:absolute;top:35px;padding:5px 3px;width:21px;height:24px;font-size:10px;background:#962820;border:1px solid #e3846966;border-radius:3px;}
+#menuUp {left:-10px;} #menuDown {right:-10px;}
+.stick-control button:disabled {opacity:.3;cursor:default;}
+.joystick {position:absolute;display:block;left:16px;top:23px;width:46px;height:62px;background:none;border-radius:0;box-shadow:none;z-index:auto;}
+.joystick::after {content:none;}
+.stick-base {position:absolute;left:0;bottom:0;width:46px;height:19px;border-radius:50%;background:radial-gradient(ellipse at 50% 40%,#454545 0 25%,#222 30% 55%,#0b0b0b 60%);box-shadow:0 3px 2px #0007,inset 0 1px #6d5b54;}
+.stick-shaft {position:absolute;left:20px;top:21px;width:7px;height:30px;border-radius:2px;background:linear-gradient(90deg,#38393a,#d5d0ca 40%,#97938d 65%,#3a3b3b);box-shadow:3px 2px 3px #0004;}
+.stick-ball {position:absolute;left:7px;top:0;width:33px;height:33px;border-radius:50%;background:radial-gradient(circle at 32% 25%,#fba59a 0,#e04c3d 20%,#b1241a 55%,#6b130d 90%);box-shadow:inset -2px -3px 4px #49090080,1px 2px 3px #0008;}
+@media(max-width:600px){body{padding:20px 8px;}.game-crt{border-radius:23px;aspect-ratio:auto;height:auto;}.game-crt canvas{aspect-ratio:4/3;height:auto;}.menu-crt{aspect-ratio:4/3;min-height:270px;}.game-crt{min-height:270px;display:grid;align-items:center;}.stick-control{width:65px;}.joystick{left:10px;}.game-controls{flex-wrap:nowrap;gap:6px;}.game-controls button{font-size:8px;padding:5px;}.game-controls span{font-size:7px;}.start-control>span{font-size:6px;}}
+
+/* A raised ball-top stick with a clearly exposed metal shaft. */
+.arcade-menu,.menu-crt,.game-crt,.game-list,.game-preview {min-width:0;}
+.select-layout {grid-template-columns:minmax(0,1fr) minmax(0,1.03fr);}
+.menu-crt {width:100%;}
+.control-deck {min-height:148px;}
+.stick-control {height:120px;}
+.joystick {top:18px;height:95px;}
+.stick-shaft {left:20px;top:26px;width:8px;height:58px;}
+.stick-ball {left:5px;width:37px;height:37px;}
+.stick-control button {top:65px;}
+@media(max-width:600px){.control-deck{min-height:143px;}.menu-status{overflow-wrap:anywhere;}.game-option{letter-spacing:0;}}
