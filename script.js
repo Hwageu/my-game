@@ -37,6 +37,7 @@ let showHitbox = showDebug;
 let playerSpeed = 2;
 const keys = {};
 const joystickKeys = {};
+let fpsActive = false;
 const joystick = document.querySelector(".joystick");
 // camera는 월드에서 화면 왼쪽 위가 가리키는 위치입니다.
 const camera = { x: 0, y: 0 };
@@ -132,6 +133,7 @@ let pendingImages = 6;
 // 방식 B: 이벤트에서는 키 상태만 기록하고, 위치 계산은 루프에서 합니다.
 const controlKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "];
 document.addEventListener("keydown", function (e) {
+  if (fpsActive) return;
   if (e.key.startsWith("Arrow") && !["INPUT", "TEXTAREA"].includes(e.target?.tagName) &&
       !e.ctrlKey && !e.metaKey && !e.altKey) {
     joystickKeys[e.key] = true;
@@ -914,7 +916,7 @@ function draw() {
 
 function gameLoop(timestamp) {
   // 메뉴에서는 보이지 않는 게임 화면을 반복해서 그리지 않습니다.
-  if (!document.getElementById("arcadeMenu").hidden) {
+  if (fpsActive || !document.getElementById("arcadeMenu").hidden) {
     requestAnimationFrame(gameLoop);
     return;
   }
@@ -973,7 +975,7 @@ for (const [image, path] of [
 let selectedMenuGame = 0;
 const menuGames = [
   {id:"selectNeon", title:"NEON SURVIVOR", description:"드론을 피해 코어를 모으세요", ready:true},
-  {id:"selectVoid", title:"VOID DODGER", description:"우주 회피 게임 · 준비 중", ready:false},
+  {id:"selectVoid", title:"VOID BREACH", description:"3D FPS · 봉쇄 시설 탈출", ready:true},
   {id:"selectCyber", title:"CYBER ESCAPE", description:"사이버 탈출 게임 · 준비 중", ready:false}
 ];
 function selectMenuGame(step) {
@@ -988,10 +990,23 @@ function selectMenuGame(step) {
   preview.querySelector("span").textContent = game.title;
   preview.classList.toggle("pending", !game.ready);
   document.getElementById("menuDescription").textContent = game.description;
-  document.getElementById("menuAvailability").textContent = game.ready ? "SURVIVAL · 1 PLAYER" : "COMING SOON";
+  document.getElementById("menuAvailability").textContent = game.ready ? (selectedMenuGame === 1 ? "3D FPS · 1 PLAYER" : "SURVIVAL · 1 PLAYER") : "COMING SOON";
   document.getElementById("menuStatus").textContent = "↑ ↓ SELECT　 ENTER START";
 }
 function launchMenuGame() {
+  if (selectedMenuGame === 1) {
+    pauseGame(); stopBackgroundMusic(); releaseKeys(); fpsActive = true;
+    document.getElementById("arcadeMenu").hidden = true;
+    document.getElementById("gameConsole").hidden = true;
+    document.getElementById("fpsConsole").hidden = false;
+    const frame = document.getElementById("fpsFrame");
+    if (!frame.getAttribute("src")) frame.src = "fps/index.html";
+    document.getElementById("menuButton").disabled = false;
+    document.getElementById("pauseButton").disabled = false;
+    document.getElementById("menuUp").disabled = true;
+    document.getElementById("menuDown").disabled = true;
+    return;
+  }
   if (!menuGames[selectedMenuGame].ready) {
     document.getElementById("menuStatus").textContent = "준비 중입니다 · 다른 게임을 선택해 주세요";
     return;
@@ -1011,6 +1026,7 @@ menuGames.forEach((game, i) => document.getElementById(game.id).addEventListener
 document.getElementById("menuUp").addEventListener("click", () => selectMenuGame(-1));
 document.getElementById("menuDown").addEventListener("click", () => selectMenuGame(1));
 document.getElementById("arcadeStart").addEventListener("click", function () {
+  if (fpsActive) { document.getElementById("fpsFrame").contentWindow.postMessage({type:"void-pause"},location.origin); return; }
   if (!document.getElementById("arcadeMenu").hidden) launchMenuGame();
   else if (gameState === "playing") pauseGame();
   else if (gameState === "paused") resumeGame();
@@ -1018,10 +1034,12 @@ document.getElementById("arcadeStart").addEventListener("click", function () {
   canvas.focus({ preventScroll: true });
 });
 document.getElementById("pauseButton").addEventListener("click", function () {
+  if (fpsActive) { document.getElementById("fpsFrame").contentWindow.postMessage({type:"void-pause"},location.origin); return; }
   if (gameState === "playing") pauseGame(); else resumeGame();
   canvas.focus({ preventScroll: true });
 });
 document.getElementById("menuButton").addEventListener("click", function () {
+  if (fpsActive) { document.getElementById("fpsFrame").contentWindow.postMessage({type:"void-pause"},location.origin); fpsActive = false; document.getElementById("fpsConsole").hidden = true; }
   pauseGame(); showNicknameForm(false);
   document.getElementById("arcadeMenu").hidden = false;
   document.getElementById("gameConsole").hidden = true;
@@ -1033,3 +1051,8 @@ document.getElementById("menuButton").addEventListener("click", function () {
   document.getElementById("menuStatus").textContent = gameState === "paused" ? "START를 눌러 이전 게임으로 돌아가기" : "↑ ↓ SELECT　 ENTER START";
   document.getElementById("arcadeStart").focus();
 });
+
+window.addEventListener("message", function(e) { if(e.origin === location.origin && e.source === document.getElementById("fpsFrame").contentWindow && e.data?.type === "void-exit") document.getElementById("menuButton").click(); });
+
+document.getElementById("cabinetFullscreen").addEventListener("click", async function(){try{if(document.fullscreenElement)await document.exitFullscreen();else await document.getElementById("arcadeCabinet").requestFullscreen();if(!fpsActive&&!document.getElementById("gameConsole").hidden)canvas.focus({preventScroll:true});}catch{this.textContent="전체화면 사용 불가";}});
+document.addEventListener("fullscreenchange",function(){document.getElementById("cabinetFullscreen").textContent=document.fullscreenElement?"화면 줄이기":"전체화면";});
