@@ -1,0 +1,26 @@
+<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Phaser 비교 실습</title><style>body{margin:0;background:#101a21;color:#dce8df;font:16px monospace;padding:20px}canvas{max-width:100%;height:auto}label{display:block;margin:10px 0}a{color:#9eddb9}</style><h1>Phaser 비교 실습</h1><p>방향키 좌우 이동 · 위쪽 키 점프 · 중력으로 바닥에 착지</p><label>중력 <input id="gravity" type="range" min="100" max="900" value="450"><output id="value">450</output></label><p id="status">라이브러리를 불러오는 중입니다.</p><div id="demo"></div><p><a href="index.html">본 게임으로 돌아가기</a> · <a href="https://docs.phaser.io/phaser/concepts/physics/arcade">공식 Arcade Physics 문서</a></p><script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.86.0/phaser.min.js" onerror="document.getElementById('status').textContent='CDN 연결 실패: 본 게임에는 영향이 없습니다.'"></script><script>
+if (typeof Phaser !== 'undefined') {
+let box, cursors;
+const config = {type:Phaser.AUTO,width:640,height:400,parent:'demo',backgroundColor:'#17232b',physics:{default:'arcade',arcade:{gravity:{y:450},debug:false}},scene:{preload,create,update}};
+// ① preload: 외부 그림이 없어 이번 예제에서는 비워 둡니다.
+function preload() {}
+// ② create: 물체와 충돌 설정은 처음 한 번 만듭니다.
+function create() {
+  box=this.add.rectangle(100,100,30,40,0x83c6a0);
+  this.physics.add.existing(box); box.body.setCollideWorldBounds(true);
+  const floor=this.add.rectangle(320,380,640,40,0x425849);
+  this.physics.add.existing(floor,true);
+  this.physics.add.collider(box,floor);
+  cursors=this.input.keyboard.createCursorKeys();
+  this.input.keyboard.addCapture([37,38,39,40]);
+  document.getElementById('status').textContent='실행 중: 중력 슬라이더를 바꿔 낙하 속도를 비교하세요.';
+  document.getElementById('gravity').addEventListener('input',e=>{this.physics.world.gravity.y=Number(e.target.value);document.getElementById('value').textContent=e.target.value;});
+}
+// ③ update: 내 gameLoop의 위치 계산에 해당합니다. 그리기·루프 예약은 Phaser가 처리합니다.
+function update() {
+  box.body.setVelocityX(cursors.left.isDown?-160:cursors.right.isDown?160:0);
+  if(cursors.up.isDown&&(box.body.touching.down||box.body.blocked.down))box.body.setVelocityY(-260);
+}
+new Phaser.Game(config);
+}
+</script></html>
