@@ -22,6 +22,12 @@ const maxDroneSpeedMultiplier = 1.8;
 const initialEnemyCount = 4;
 const enemyCountInterval = 10; // 10초마다 드론 한 대를 추가합니다.
 const maxEnemyCount = 12;
+const hunterSpeed = 0.65;
+const hunterNearSpeed = 0.95;
+const hunterDetectionRange = 220;
+let endMessages = { low: ["다음 구역에 다시 도전!"], mid: ["코어 수집이 익숙해졌어요"], high: ["멋진 탐색이었어요!"] };
+let gameOverMessage = "";
+let previousMessage = "";
 const droneSize = { width: 82, height: 52 };
 // 충돌 실습 중에는 true, 최종 제출 때는 false로 바꿉니다.
 let showDebug = false; // D키로 켜서 확인하고, 제출 상태에서는 꺼 둡니다.
@@ -67,6 +73,14 @@ let invincibleUntil = 0;
 let lastHitTime = null;
 let startTime = null;
 let elapsedSeconds = 0;
+// 공개용 키 — 비밀 키를 넣지 말 것. 서버 권한 검증 후에만 enabled를 true로 바꿉니다.
+const rankingConfig = { enabled: true, url: "https://lyqamxabwefmuyxyfplz.supabase.co", publishableKey: "sb_publishable_CoNYFetz1_k5Ull-oFiR0w_7Q69Unnp" };
+let rankingRows = [];
+let rankingStatus = "";
+let showLeaderboard = false;
+let rankSubmitted = false;
+let rankSubmitting = false;
+let runId = 0;
 let isMuted = false;
 const soundEffects = {
   point: makeSound("assets/point.wav", 0.45),
@@ -78,7 +92,7 @@ for (let i = 0; i < initialEnemyCount; i++) {
   enemies.push({
     x: 0, y: 0, vx: 0, vy: 0,
     speed: 0.8 + (i % 3) * 0.125,
-    active: false, spawnDelay: i * 100
+    isHunter: i === 0, active: false, spawnDelay: i * 100
   });
 }
 
@@ -97,6 +111,16 @@ let pendingImages = 6;
 // 방식 B: 이벤트에서는 키 상태만 기록하고, 위치 계산은 루프에서 합니다.
 const controlKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "];
 document.addEventListener("keydown", function (e) {
+  if (!e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && gameState !== "playing") {
+    if (e.key === "l" || e.key === "L") {
+      e.preventDefault(); showLeaderboard = !showLeaderboard;
+      if (showLeaderboard) loadLeaderboard();
+      return;
+    }
+    if ((e.key === "n" || e.key === "N") && gameState === "gameover") {
+      e.preventDefault(); submitRanking(); return;
+    }
+  }
   if ((e.key === "m" || e.key === "M") && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) {
     e.preventDefault();
     isMuted = !isMuted;
@@ -169,6 +193,98 @@ function updateHighScore() {
   highScore = score;
   try { localStorage.setItem(highScoreKey, String(highScore)); }
   catch { /* 저장이 막혀도 현재 화면의 기록은 유지합니다. */ }
+}
+
+async function loadEndMessages() {
+  try {
+    const response = await fetch("messages.json");
+    if (!response.ok) throw new Error("messages unavailable");
+    const data = await response.json();
+    for (const tier of ["low", "mid", "high"]) {
+      if (!Array.isArray(data[tier])) continue;
+      const valid = data[tier].filter(text => typeof text === "string" &&
+        Array.from(text).length <= 20 && text.trim()).slice(0, 10);
+      if (valid.length) endMessages[tier] = valid;
+    }
+  } catch { /* 로컬 파일 직접 열기와 오프라인에서도 기본 문구를 씁니다. */ }
+}
+function pickEndMessage() {
+  const tier = score <= 30 ? "low" : score <= 80 ? "mid" : "high";
+  const choices = endMessages[tier];
+  const pool = choices.length > 1 ? choices.filter(text => text !== previousMessage) : choices;
+  const result = pool[Math.floor(Math.random() * pool.length)] || choices[0];
+  previousMessage = result;
+  return result;
+}
+
+function rankingReady() {
+  try {
+    const url = new URL(rankingConfig.url);
+    return rankingConfig.enabled && url.protocol === "https:" &&
+      /^[a-z0-9-]+[.]supabase[.]co$/.test(url.hostname) && url.origin === rankingConfig.url &&
+      /^sb_publishable_[A-Za-z0-9_-]+$/.test(rankingConfig.publishableKey);
+  } catch { return false; }
+}
+async function rankRequest(query, options = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  try {
+    const response = await fetch(rankingConfig.url + "/rest/v1/scores" + query, {
+      ...options, signal: controller.signal,
+      headers: { apikey: rankingConfig.publishableKey, "Content-Type": "application/json",
+        Prefer: "return=minimal", ...options.headers }
+    });
+    if (!response.ok) throw new Error("ranking request failed");
+    return options.method === "POST" ? null : await response.json();
+  } finally { clearTimeout(timer); }
+}
+async function loadLeaderboard() {
+  if (!rankingReady()) { rankingStatus = "온라인 랭킹 연결 준비 중"; return; }
+  rankingStatus = "랭킹 불러오는 중...";
+  try {
+    const rows = await rankRequest("?select=name,score&order=score.desc,created_at.asc&limit=10");
+    if (!Array.isArray(rows)) throw new Error("invalid ranking");
+    rankingRows = rows.filter(row => typeof row.name === "string" &&
+      Number.isSafeInteger(row.score) && row.score >= 0 && row.score <= 1000000)
+      .map(row => ({name: Array.from(row.name).slice(0, 8).join(""), score: row.score}));
+    rankingStatus = rankingRows.length ? "" : "첫 기록을 등록해 보세요";
+  } catch { rankingStatus = "랭킹을 불러올 수 없습니다"; }
+}
+async function submitRanking() {
+  if (gameState !== "gameover" || rankSubmitting || rankSubmitted) return;
+  if (!rankingReady()) { rankingStatus = "온라인 랭킹 연결 준비 중"; showLeaderboard = true; return; }
+  if (!Number.isSafeInteger(score) || score < 0 || score > 1000000) return;
+  const input = window.prompt("공개 닉네임 1~8자 (실명·학번·연락처 입력 금지)", "익명");
+  if (input === null) return;
+  const name = input.trim() || "익명";
+  if (!/^[\p{L}\p{N}_ -]{1,8}$/u.test(name)) {
+    rankingStatus = "닉네임은 글자·숫자·공백·_- 1~8자"; showLeaderboard = true; return;
+  }
+  const submittedRun = runId;
+  rankSubmitting = true; showLeaderboard = true; rankingStatus = "등록 중...";
+  try {
+    await rankRequest("", {method: "POST", body: JSON.stringify({name, score})});
+    if (runId !== submittedRun) return;
+    rankSubmitted = true;
+    await loadLeaderboard();
+    if (runId === submittedRun && !rankingStatus) rankingStatus = "등록 완료";
+  } catch { if (runId === submittedRun) rankingStatus = "등록 실패 — 네트워크를 확인해 주세요"; }
+  finally { if (runId === submittedRun) rankSubmitting = false; }
+}
+function drawLeaderboard() {
+  if (!showLeaderboard || gameState === "playing") return;
+  ctx = screenCtx; ctx.save();
+  ctx.fillStyle = "rgba(3,10,16,0.98)"; ctx.fillRect(155,110,490,405);
+  ctx.strokeStyle = "#83c6a0"; ctx.strokeRect(155,110,490,405);
+  ctx.textAlign = "center";
+  label("ONLINE TOP 10",400,145,23,"#bddc8e","bold");
+  for (let i = 0; i < rankingRows.length; i++) {
+    const row = rankingRows[i];
+    label((i + 1) + ". " + row.name + " — " + row.score,400,177+i*25,14,"#e5ebe6");
+  }
+  label(rankingStatus,400,455,12,"#9bafae");
+  label(gameState === "gameover" ? "L 닫기 · N 닉네임 등록 · R 재시작" : "L 닫기",400,487,12,"#9bafae");
+  ctx.restore();
 }
 
 function makeSound(source, volume) {
@@ -268,6 +384,8 @@ function checkEnemyCollisions(now) {
       if (health === 0) {
         gameState = "gameover";
         updateHighScore();
+        gameOverMessage = pickEndMessage();
+        if (rankingReady()) loadLeaderboard();
         player.moving = false;
         releaseKeys();
       }
@@ -413,6 +531,7 @@ for (const enemy of enemies) {
   glow(enemy.x, enemy.y + 7, 55, "rgba(255,45,100,0.10)");
   ctx.fillStyle = "#00000055";
   ctx.beginPath(); ctx.ellipse(enemy.x + 4, enemy.y + 23, 32, 11, 0, 0, Math.PI * 2); ctx.fill();
+  if (enemy.isHunter) label("HUNTER",enemy.x - 23,enemy.y - 34,10,"#e8d389","bold");
   if (droneImage.naturalWidth > 0) {
     const row = Math.abs(enemy.vx) >= Math.abs(enemy.vy)
       ? (enemy.vx < 0 ? 1 : 2) : (enemy.vy < 0 ? 3 : 0);
@@ -525,6 +644,15 @@ function updateDrones() {
       if (enemy.spawnDelay > 0) { enemy.spawnDelay--; continue; }
       spawnDrone(enemy);
     }
+    if (enemy.isHunter) {
+      const dx = player.x + player.size / 2 - enemy.x;
+      const dy = player.y + player.size / 2 - enemy.y;
+      const distance = Math.hypot(dx, dy);
+      const speed = distance < hunterDetectionRange ? hunterNearSpeed : hunterSpeed;
+      // 최대 속도는 0.95×1.8=1.71로 플레이어 속도 2보다 느립니다.
+      enemy.vx = distance > 8 ? dx / distance * speed / droneSpeed : 0;
+      enemy.vy = distance > 8 ? dy / distance * speed / droneSpeed : 0;
+    }
     enemy.x += enemy.vx * currentDroneSpeed;
     enemy.y += enemy.vy * currentDroneSpeed;
     // 충분히 멀어진 적은 즉시 순간이동시키지 않고 잠시 뒤 새로 진입시킵니다.
@@ -572,7 +700,9 @@ function formatTime(seconds) {
 }
 // 새 루프를 만들지 않고, 이번 판의 값만 처음 상태로 되돌립니다.
 function resetGame() {
+  runId += 1; rankSubmitted = false; rankSubmitting = false; showLeaderboard = false;
   isNewRecord = false;
+  gameOverMessage = "";
   for (const sound of Object.values(soundEffects)) {
     if (!sound) continue;
     try { sound.pause(); sound.currentTime = 0; } catch {}
@@ -591,7 +721,7 @@ function resetGame() {
   enemies.length = 0;
   for (let i = 0; i < initialEnemyCount; i++) {
     enemies.push({x: 0, y: 0, vx: 0, vy: 0, speed: 0.8 + (i % 3) * 0.125,
-      active: false, spawnDelay: i * 100});
+      isHunter: i === 0, active: false, spawnDelay: i * 100});
   }
   itemChunks.clear();
   visibleCores = [];
@@ -631,7 +761,8 @@ function drawGameOver() {
   label("최고 점수: " + highScore,400,315,18,"#bddc8e");
   label("생존 시간: " + formatTime(elapsedSeconds),400,348,16,"#9bafae");
   if (isNewRecord) label("신기록!",400,380,19,"#e8d389","bold");
-  label("R 키를 눌러 다시 시작",400,421,17,"#e5ebe6");
+  label(gameOverMessage,400,402,13,"#9bafae");
+  label("R 다시 시작 · L 온라인 랭킹 · N 기록 등록",400,430,12,"#e5ebe6");
   ctx.restore();
 }
 
@@ -677,6 +808,7 @@ function draw() {
   if (gameState === "start") drawStartScreen();
   if (gameState === "gameover") drawGameOver();
   drawDebugInfo();
+  drawLeaderboard();
 }
 
 function gameLoop(timestamp) {
@@ -711,6 +843,8 @@ function gameLoop(timestamp) {
 
 // ===== ⑥. 시동 — 이미지 준비 후 루프 한 번 시작 =====
 
+
+loadEndMessages();
 
 for (const [image, path] of [
   [floorImage, "assets/floor-tile.jpg"],
