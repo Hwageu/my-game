@@ -468,7 +468,8 @@ line(414,22,414,77,"#303a43");
 label("SCORE",438,30,9);label(String(score).padStart(4, "0"),437,59,25,"#e9efea","bold");
 label("BEST " + highScore,546,82,10,"#bddc8e");
 label("SURVIVAL",546,30,9);label(formatTime(elapsedSeconds),545,59,25,"#e9efea","bold");
-label("VITALS",667,30,9);label(health + " / " + maxHealth,739,30,9,"#94c9a4");
+const recentlyHit = lastHitTime !== null && Date.now() - lastHitTime < 700;
+label(recentlyHit ? "DAMAGE -1" : "VITALS",667,30,9,recentlyHit ? "#ff8395" : "#9cabb6");label(health + " / " + maxHealth,739,30,9,recentlyHit ? "#ff8395" : "#94c9a4");
 for(let i=0;i<3;i++) {
   polygon([[667+i*34,42],[693+i*34,42],[689+i*34,58],[663+i*34,58]],i < health ? "#83c6a0" : "#293a36");
 }
