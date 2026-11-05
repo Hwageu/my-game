@@ -970,7 +970,7 @@ for (const [image, path] of [
 let selectedMenuGame = 0;
 const menuGames = [
   {id:"selectNeon", title:"NEON SURVIVOR", description:"드론을 피해 코어를 모으세요", ready:true},
-  {id:"selectVoid", title:"VOID BREACH", description:"3D FPS · 봉쇄 시설 탈출", ready:true},
+  {id:"selectVoid", title:"VOID BREACH", description:"3개 구역 · 탐험·전투·보스전", ready:true},
   {id:"selectCyber", title:"CYBER ESCAPE", description:"사이버 탈출 게임 · 준비 중", ready:false}
 ];
 function selectMenuGame(step) {
@@ -1001,7 +1001,7 @@ function launchMenuGame() {
     document.getElementById("gameConsole").hidden = true;
     document.getElementById("fpsConsole").hidden = false;
     const frame = document.getElementById("fpsFrame");
-    if (!frame.getAttribute("src")) frame.src = "fps/index.html?v=20261105";
+    if (!frame.getAttribute("src")) frame.src = "fps/index.html?v=20261105-rush";
     else syncFpsPreferences();
     document.getElementById("menuButton").disabled = false;
     document.getElementById("pauseButton").disabled = false;
@@ -1094,7 +1094,7 @@ document.getElementById('fpsFrame').addEventListener('load',syncFpsPreferences);
 window.addEventListener('message',e=>{
   if(e.origin!==location.origin||e.source!==document.getElementById('fpsFrame').contentWindow)return;
   if(e.data?.type==='void-audio')applyAudioMute(e.data.muted,false);
-  if(e.data?.type==='void-state'&&fpsActive){const mode=e.data.mode;document.getElementById('pauseButton').textContent=mode==='paused'?'▶ 재개':['dead','won'].includes(mode)?'다시 시작':'Ⅱ 일시정지';}
+  if(e.data?.type==='void-state'&&fpsActive){const mode=e.data.mode;document.getElementById('pauseButton').textContent=mode==='paused'?'▶ 재개':mode==='won'?(e.data.lastStage?'처음부터':'다음 구역'):mode==='dead'?'다시 시작':'Ⅱ 일시정지';}
 });
 applyAudioMute(isMuted);applyTouchLayout();
 
