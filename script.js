@@ -37,7 +37,9 @@ let showHitbox = showDebug;
 let playerSpeed = 2;
 const keys = {};
 const joystickKeys = {};
-let fpsActive = false;
+let embeddedActive = false;
+let embeddedGame=1;
+function embeddedFrame(){return document.getElementById(embeddedGame===2?"cursedFrame":"fpsFrame");}
 const menuMusic = new Audio("assets/menu-chip.wav");menuMusic.loop=true;menuMusic.volume=.35;
 function syncMenuMusic(){if(!isMuted&&!document.getElementById("arcadeMenu").hidden&&!document.hidden)menuMusic.play().catch(()=>{});else menuMusic.pause();}
 const joystick = document.querySelector(".joystick");
@@ -137,7 +139,7 @@ let pendingImages = 6;
 const controlKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "];
 document.addEventListener("keydown", function (e) {
   if (!["INPUT", "TEXTAREA"].includes(e.target?.tagName) && e.key.toLowerCase() === "m" && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); applyAudioMute(!isMuted); return; }
-  if (fpsActive) return;
+  if (embeddedActive) return;
   if (e.key.startsWith("Arrow") && !["INPUT", "TEXTAREA"].includes(e.target?.tagName) &&
       !e.ctrlKey && !e.metaKey && !e.altKey) {
     joystickKeys[e.key] = true;
@@ -907,7 +909,7 @@ function draw() {
 
 function gameLoop(timestamp) {
   // 메뉴에서는 보이지 않는 게임 화면을 반복해서 그리지 않습니다.
-  if (fpsActive || !document.getElementById("arcadeMenu").hidden) {
+  if (embeddedActive || !document.getElementById("arcadeMenu").hidden) {
     requestAnimationFrame(gameLoop);
     return;
   }
@@ -971,7 +973,7 @@ let selectedMenuGame = 0;
 const menuGames = [
   {id:"selectNeon", title:"NEON SURVIVOR", description:"드론을 피해 코어를 모으세요", ready:true},
   {id:"selectVoid", title:"VOID BREACH", description:"3개 구역 · 탐험·전투·보스전", ready:true},
-  {id:"selectCyber", title:"CYBER ESCAPE", description:"사이버 탈출 게임 · 준비 중", ready:false}
+  {id:"selectCursed", title:"CURSED EDGE", description:"저주를 받아치는 검 · 패링 액션", ready:true}
 ];
 function selectMenuGame(step) {
   syncMenuMusic();
@@ -988,21 +990,24 @@ function selectMenuGame(step) {
   preview.querySelector("span").textContent = game.title;
   preview.classList.toggle("pending", !game.ready);
   preview.classList.toggle("fps-preview", selectedMenuGame === 1);
+  preview.classList.toggle("cursed-preview", selectedMenuGame === 2);
   document.getElementById("menuDescription").textContent = game.description;
-  document.getElementById("menuAvailability").textContent = game.ready ? (selectedMenuGame === 1 ? "3D FPS · 1 PLAYER" : "SURVIVAL · 1 PLAYER") : "COMING SOON";
+  document.getElementById("menuAvailability").textContent = game.ready ? (selectedMenuGame === 1 ? "3D FPS · 1 PLAYER" : selectedMenuGame===2 ? "PARRY ACTION · 1 PLAYER" : "SURVIVAL · 1 PLAYER") : "COMING SOON";
   document.getElementById("menuStatus").textContent = "↑ ↓ SELECT　 ENTER START";
 }
 function launchMenuGame() {
   if (!menuGames[selectedMenuGame].ready) { document.getElementById("menuStatus").textContent = "준비 중입니다 · 다른 게임을 선택해 주세요"; return; }
   menuMusic.pause();
-  if (selectedMenuGame === 1) {
-    pauseGame(); stopBackgroundMusic(); releaseKeys(); fpsActive = true; applyTouchLayout();
+  if (selectedMenuGame > 0) {
+    embeddedGame=selectedMenuGame;
+    pauseGame(); stopBackgroundMusic(); releaseKeys(); embeddedActive = true; applyTouchLayout();
     document.getElementById("arcadeMenu").hidden = true;
     document.getElementById("gameConsole").hidden = true;
-    document.getElementById("fpsConsole").hidden = false;
-    const frame = document.getElementById("fpsFrame");
-    if (!frame.getAttribute("src")) frame.src = "fps/index.html?v=20261105-audio";
-    else syncFpsPreferences();
+    document.getElementById("fpsConsole").hidden = selectedMenuGame!==1;
+    document.getElementById("cursedConsole").hidden = selectedMenuGame!==2;
+    const frame = embeddedFrame();
+    if (!frame.getAttribute("src")) frame.src = selectedMenuGame===2 ? "cursed/index.html?v=20261105-curse" : "fps/index.html?v=20261105-audio";
+    else syncEmbeddedPreferences();
     document.getElementById("menuButton").disabled = false;
     document.getElementById("pauseButton").disabled = false;
     document.getElementById("menuUp").disabled = true;
@@ -1026,7 +1031,7 @@ menuGames.forEach((game, i) => document.getElementById(game.id).addEventListener
 document.getElementById("menuUp").addEventListener("click", () => selectMenuGame(-1));
 document.getElementById("menuDown").addEventListener("click", () => selectMenuGame(1));
 document.getElementById("arcadeStart").addEventListener("click", function () {
-  if (fpsActive) { document.getElementById("fpsFrame").contentWindow.postMessage({type:"void-toggle-pause"},location.origin); return; }
+  if (embeddedActive) { embeddedFrame().contentWindow.postMessage({type:"void-toggle-pause"},location.origin); return; }
   if (!document.getElementById("arcadeMenu").hidden) launchMenuGame();
   else if (gameState === "playing") pauseGame();
   else if (gameState === "paused") resumeGame();
@@ -1034,13 +1039,13 @@ document.getElementById("arcadeStart").addEventListener("click", function () {
   canvas.focus({ preventScroll: true });
 });
 document.getElementById("pauseButton").addEventListener("click", function () {
-  if (fpsActive) { document.getElementById("fpsFrame").contentWindow.postMessage({type:"void-toggle-pause"},location.origin); return; }
+  if (embeddedActive) { embeddedFrame().contentWindow.postMessage({type:"void-toggle-pause"},location.origin); return; }
   if (gameState === "playing") pauseGame(); else resumeGame();
   canvas.focus({ preventScroll: true });
 });
 document.getElementById("menuButton").addEventListener("click", function () {
   document.body.classList.remove("touch-play", "fps-playing");
-  if (fpsActive) { document.getElementById("fpsFrame").contentWindow.postMessage({type:"void-pause"},location.origin); fpsActive = false; document.getElementById("fpsConsole").hidden = true; }
+  if (embeddedActive) { embeddedFrame().contentWindow.postMessage({type:"void-pause"},location.origin); embeddedActive = false; document.getElementById("fpsConsole").hidden = true; document.getElementById("cursedConsole").hidden=true; }
   pauseGame(); showNicknameForm(false);
   document.getElementById("arcadeMenu").hidden = false;
   document.getElementById("gameConsole").hidden = true;
@@ -1053,9 +1058,9 @@ document.getElementById("menuButton").addEventListener("click", function () {
   document.getElementById("arcadeStart").focus();
 });
 
-window.addEventListener("message", function(e) { if(e.origin === location.origin && e.source === document.getElementById("fpsFrame").contentWindow && e.data?.type === "void-exit") document.getElementById("menuButton").click(); });
+window.addEventListener("message", function(e) { if(e.origin === location.origin && e.source === embeddedFrame().contentWindow && e.data?.type === "void-exit") document.getElementById("menuButton").click(); });
 
-document.getElementById("cabinetFullscreen").addEventListener("click", async function(){try{if(document.fullscreenElement)await document.exitFullscreen();else await document.getElementById("arcadeCabinet").requestFullscreen();if(!fpsActive&&!document.getElementById("gameConsole").hidden)canvas.focus({preventScroll:true});}catch{this.textContent="전체화면 사용 불가";}});
+document.getElementById("cabinetFullscreen").addEventListener("click", async function(){try{if(document.fullscreenElement)await document.exitFullscreen();else await document.getElementById("arcadeCabinet").requestFullscreen();if(!embeddedActive&&!document.getElementById("gameConsole").hidden)canvas.focus({preventScroll:true});}catch{this.textContent="전체화면 사용 불가";}});
 document.addEventListener("fullscreenchange",function(){document.getElementById("cabinetFullscreen").textContent=document.fullscreenElement?"화면 줄이기":"전체화면";});
 
 document.addEventListener("pointerdown",syncMenuMusic);
@@ -1075,26 +1080,26 @@ function applyAudioMute(value, notifyFrame=true) {
   isMuted=Boolean(value);try{localStorage.setItem('neonArcadeMuted',String(isMuted));}catch{}
   for(const sound of [...Object.values(soundEffects),backgroundMusic,menuMusic])if(sound)sound.muted=isMuted;
   const button=document.getElementById('menuSound');button.textContent=isMuted?'소리 OFF':'소리 ON';button.setAttribute('aria-pressed',String(isMuted));
-  syncMenuMusic();if(isMuted)stopBackgroundMusic();else if(!fpsActive)startBackgroundMusic();
-  if(notifyFrame)syncFpsPreferences();
+  syncMenuMusic();if(isMuted)stopBackgroundMusic();else if(!embeddedActive)startBackgroundMusic();
+  if(notifyFrame)syncEmbeddedPreferences();
 }
 let touchPreference=matchMedia('(pointer:coarse)').matches||navigator.maxTouchPoints>0;
 function applyTouchLayout(launching=false){
-  const active=launching||fpsActive||document.getElementById('arcadeMenu').hidden;
+  const active=launching||embeddedActive||document.getElementById('arcadeMenu').hidden;
   document.body.classList.toggle('touch-play',touchPreference&&active);
-  document.body.classList.toggle('fps-playing',fpsActive);
+  document.body.classList.toggle('fps-playing',embeddedActive);
   document.getElementById('touchMode').setAttribute('aria-pressed',String(touchPreference));
-  syncFpsPreferences();
+  syncEmbeddedPreferences();
 }
-function syncFpsPreferences(){const frame=document.getElementById('fpsFrame');if(frame.getAttribute('src'))frame.contentWindow.postMessage({type:'arcade-preferences',muted:isMuted,touch:touchPreference},location.origin);}
+function syncEmbeddedPreferences(){for(const id of ['fpsFrame','cursedFrame']){const frame=document.getElementById(id);if(frame.getAttribute('src'))frame.contentWindow.postMessage({type:'arcade-preferences',muted:isMuted,touch:touchPreference},location.origin);}}
 document.getElementById('menuSound').onclick=()=>applyAudioMute(!isMuted);
 document.getElementById('touchMode').onclick=()=>{resetNeonPad();touchPreference=!touchPreference;applyTouchLayout();};
 document.getElementById('menuLaunch').onclick=launchMenuGame;
-document.getElementById('fpsFrame').addEventListener('load',syncFpsPreferences);
+for(const id of ['fpsFrame','cursedFrame'])document.getElementById(id).addEventListener('load',syncEmbeddedPreferences);
 window.addEventListener('message',e=>{
-  if(e.origin!==location.origin||e.source!==document.getElementById('fpsFrame').contentWindow)return;
+  if(e.origin!==location.origin||e.source!==embeddedFrame().contentWindow)return;
   if(e.data?.type==='void-audio')applyAudioMute(e.data.muted,false);
-  if(e.data?.type==='void-state'&&fpsActive){const mode=e.data.mode;document.getElementById('pauseButton').textContent=mode==='paused'?'▶ 재개':mode==='won'?(e.data.lastStage?'처음부터':'다음 구역'):mode==='dead'?'다시 시작':'Ⅱ 일시정지';}
+  if(e.data?.type==='void-state'&&embeddedActive){const mode=e.data.mode;document.getElementById('pauseButton').textContent=mode==='upgrade'?'강화 선택':mode==='paused'?'▶ 재개':mode==='won'?(e.data.lastStage?'처음부터':'다음 구역'):mode==='dead'?'다시 시작':'Ⅱ 일시정지';}
 });
 applyAudioMute(isMuted);applyTouchLayout();
 
