@@ -56,7 +56,8 @@ if(checkpoint.rounds?.length===3&&checkpoint.reserve?.length===3){state.hp=Math.
 function stageUrl(index){const url=new URL(location.href);url.searchParams.set('stage',String(index));return url.href;}
 function nextStage(){if(stageIndex<Stages.STAGES.length-1){const saved={stage:stageIndex+1,campaign:stageIndex===0||checkpoint.campaign===true,shots:(checkpoint.shots||0)+state.shots,hits:(checkpoint.hits||0)+state.hits,hp:Math.min(100,state.hp+20),rounds:[12,6,24],reserve:state.reserve.map((n,i)=>n+[18,8,24][i]),time:(checkpoint.time||0)+state.time,kills:(checkpoint.kills||0)+state.kills,secrets:(checkpoint.secrets||0)+state.secrets};try{sessionStorage.setItem('voidBreachCheckpoint',JSON.stringify(saved));}catch{}location.href=stageUrl(stageIndex+1);}else {try{sessionStorage.removeItem('voidBreachCheckpoint');}catch{}location.href=stageUrl(0);}}
 
-const music=new Audio('industrial.wav?v=20261105-metal');music.loop=true;music.volume=.38;
+const music=new Audio('industrial.wav?v=20261105-metal');music.loop=true;music.volume=.38;let shotDuck=0;
+function updateAudioMix(dt){shotDuck=Math.max(0,shotDuck-dt);const target=shotDuck>0?.16:.38;music.volume+=(target-music.volume)*(1-Math.exp(-dt*9));}
 function syncMusic(){if(!muted&&state.mode==='playing')music.play().catch(()=>{});else music.pause();}
 let hitTimer=0,hitLabel='';
 let dragMode=false,lookDrag=false;
@@ -147,7 +148,22 @@ function updateEnemies(dt){
     if(visible&&dist<(e.type===0?2.5:24)&&e.cool<=0){e.windup=e.type===0?.24:e.type===2?difficulty.heavyWindup:difficulty.windup;e.target.copy(camera.position);if(e.type!==0)tone(540,.1,'sine',.025);}
   }
 }
-function gunNoise(){if(muted)return;try{audio ||= new AudioContext();audio.resume();const length=Math.floor(audio.sampleRate*.13),buffer=audio.createBuffer(1,length,audio.sampleRate),data=buffer.getChannelData(0);for(let i=0;i<length;i++)data[i]=(Math.random()*2-1)*Math.pow(1-i/length,3);const source=audio.createBufferSource(),filter=audio.createBiquadFilter(),gain=audio.createGain();filter.type='lowpass';filter.frequency.value=state.weapon===1?1300:2200;gain.gain.value=state.weapon===1?.24:.12;source.buffer=buffer;source.connect(filter).connect(gain).connect(audio.destination);source.start();}catch{}}
+function gunNoise(){if(muted)return;try{
+  audio ||= new AudioContext();audio.resume();
+  const i=state.weapon,duration=[.16,.26,.12][i],length=Math.floor(audio.sampleRate*duration),buffer=audio.createBuffer(1,length,audio.sampleRate),data=buffer.getChannelData(0);
+  for(let n=0;n<length;n++){
+    const t=n/audio.sampleRate,noise=Math.random()*2-1,attack=Math.min(1,t/.0008),tail=Math.min(1,(duration-t)/.012);
+    const crack=noise*Math.exp(-t*[38,23,48][i]);
+    const body=Math.sin(2*Math.PI*([110,70,155][i]*t+1.9*(1-Math.exp(-t/.014))))*Math.exp(-t*[29,18,40][i]);
+    const bolt=t>.045?noise*.18*Math.exp(-(t-.045)*95):0;
+    data[n]=Math.tanh((crack*.8+body*.43+bolt)*1.2)*attack*tail;
+  }
+  const source=audio.createBufferSource(),filter=audio.createBiquadFilter(),gain=audio.createGain();
+  filter.type='lowpass';filter.frequency.value=[7400,6200,7800][i];filter.Q.value=.55;gain.gain.value=[.58,.72,.52][i];
+  source.buffer=buffer;source.connect(filter).connect(gain).connect(audio.destination);source.onended=()=>{source.disconnect();filter.disconnect();gain.disconnect();};source.start();
+  shotDuck=.18;music.volume=Math.min(music.volume,.16);
+}catch{}}
+
 function movePlayer(dt,x,z){const len=Math.max(1,Math.hypot(x,z)),sprint=keys.ShiftLeft||keys.ShiftRight,speed=sprint?12:8.5,dashStep=Math.min(state.dash,dt);state.dashCooldown=Math.max(0,state.dashCooldown-dt);state.dash=Math.max(0,state.dash-dt);if(dashStep>0)move(camera.position,state.dashX*23*dashStep,state.dashZ*23*dashStep);const rest=dt-dashStep;if(rest>0)move(camera.position,(x*Math.cos(yaw)+z*Math.sin(yaw))/len*speed*rest,(-x*Math.sin(yaw)+z*Math.cos(yaw))/len*speed*rest);if(!reducedMotion){const fov=state.dash>0?96:sprint&&(x||z)?89:82;camera.fov=T.MathUtils.damp(camera.fov,fov,9,dt);camera.updateProjectionMatrix();}}
 function dash(){if(state.mode!=='playing'||state.dashCooldown>0)return;let x=Number(!!(keys.KeyD||keys.ArrowRight))-Number(!!(keys.KeyA||keys.ArrowLeft)),z=Number(!!(keys.KeyS||keys.ArrowDown))-Number(!!(keys.KeyW||keys.ArrowUp));if(!x&&!z)z=-1;const l=Math.hypot(x,z);state.dashX=(x*Math.cos(yaw)+z*Math.sin(yaw))/l;state.dashZ=(-x*Math.sin(yaw)+z*Math.cos(yaw))/l;state.dash=.18;state.dashCooldown=1.15;tone(180,.15,'sawtooth',.025);}
 function reload(){const i=state.weapon,w=specs[i];if(!state.reload&&state.rounds[i]<w.cap&&state.reserve[i]>0){state.reload=[1.2,1.8,1.4][i];notify('장전 중…');tone(120,.08);}}
@@ -159,7 +175,7 @@ show(win?(final?'EXTRACTED':'SECTOR CLEAR'):'SIGNAL LOST',(win?(final&&checkpoin
 
 function hurt(n){state.hp=Math.max(0,state.hp-n);state.hurt=.65;tone(65,.12);if(!state.hp)end(false);}
 let previous=performance.now();function frame(now){requestAnimationFrame(frame);const dt=Math.min((now-previous)/1000,.05);previous=now;if(state.mode==='won'){if(state.transition>0){state.transition-=dt;$('enter').textContent='다음 구역으로 · '+Math.max(1,Math.ceil(state.transition));if(state.transition<=0)nextStage();}return;}if(['paused','dead'].includes(state.mode))return;if(state.mode==='countdown'){countdown-=dt;$('notice').textContent=String(Math.max(1,Math.ceil(countdown)));if(countdown<=0){state.mode='playing';syncMusic();reportMode();notify('전투 재개');}}
-if(state.mode==='playing'){state.time+=dt;Art.animateStage(stageArt,state.time,dt);state.cool=Math.max(0,state.cool-dt);state.hurt=Math.max(0,state.hurt-dt);state.recoil=Math.max(0,state.recoil-dt*9);if(state.reload>0){state.reload-=dt;if(state.reload<=0){const i=state.weapon,n=Math.min(specs[i].cap-state.rounds[i],state.reserve[i]);state.rounds[i]+=n;state.reserve[i]-=n;notify('장전 완료');tone(220,.06);}}let x=Number(!!(keys.KeyD||keys.ArrowRight))-Number(!!(keys.KeyA||keys.ArrowLeft)),z=Number(!!(keys.KeyS||keys.ArrowDown))-Number(!!(keys.KeyW||keys.ArrowUp));movePlayer(dt,x,z);camera.rotation.set(pitch,yaw,0);moveBlend=T.MathUtils.damp(moveBlend,x||z?1:0,8,dt);camera.position.y=1.65+(reducedMotion?0:Math.sin(state.time*12)*.025*moveBlend);stepTimer-=dt;if((x||z)&&stepTimer<=0){stepTimer=keys.ShiftLeft?.28:.42;tone(72+Math.random()*10,.055,'triangle',.015);}if(mouseDown)shoot();
+if(state.mode==='playing'){updateAudioMix(dt);state.time+=dt;Art.animateStage(stageArt,state.time,dt);state.cool=Math.max(0,state.cool-dt);state.hurt=Math.max(0,state.hurt-dt);state.recoil=Math.max(0,state.recoil-dt*9);if(state.reload>0){state.reload-=dt;if(state.reload<=0){const i=state.weapon,n=Math.min(specs[i].cap-state.rounds[i],state.reserve[i]);state.rounds[i]+=n;state.reserve[i]-=n;notify('장전 완료');tone(220,.06);}}let x=Number(!!(keys.KeyD||keys.ArrowRight))-Number(!!(keys.KeyA||keys.ArrowLeft)),z=Number(!!(keys.KeyS||keys.ArrowDown))-Number(!!(keys.KeyW||keys.ArrowUp));movePlayer(dt,x,z);camera.rotation.set(pitch,yaw,0);moveBlend=T.MathUtils.damp(moveBlend,x||z?1:0,8,dt);camera.position.y=1.65+(reducedMotion?0:Math.sin(state.time*12)*.025*moveBlend);stepTimer-=dt;if((x||z)&&stepTimer<=0){stepTimer=keys.ShiftLeft?.28:.42;tone(72+Math.random()*10,.055,'triangle',.015);}if(mouseDown)shoot();
 updateEnemies(dt);
 if(state.mode!=='playing')return;
 updateEnemyProjectiles(dt);

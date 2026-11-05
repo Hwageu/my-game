@@ -1001,7 +1001,7 @@ function launchMenuGame() {
     document.getElementById("gameConsole").hidden = true;
     document.getElementById("fpsConsole").hidden = false;
     const frame = document.getElementById("fpsFrame");
-    if (!frame.getAttribute("src")) frame.src = "fps/index.html?v=20261105-rush";
+    if (!frame.getAttribute("src")) frame.src = "fps/index.html?v=20261105-audio";
     else syncFpsPreferences();
     document.getElementById("menuButton").disabled = false;
     document.getElementById("pauseButton").disabled = false;
