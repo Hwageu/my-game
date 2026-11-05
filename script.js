@@ -103,6 +103,7 @@ let rankSubmitted = false;
 let rankSubmitting = false;
 let runId = 0;
 let isMuted = false;
+try { isMuted = localStorage.getItem("neonArcadeMuted") === "true"; } catch {}
 const soundEffects = {
   point: makeSound("assets/point.wav", 0.45),
   hit: makeSound("assets/hit.wav", 0.5),
@@ -135,6 +136,7 @@ let pendingImages = 6;
 // 방식 B: 이벤트에서는 키 상태만 기록하고, 위치 계산은 루프에서 합니다.
 const controlKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "];
 document.addEventListener("keydown", function (e) {
+  if (!["INPUT", "TEXTAREA"].includes(e.target?.tagName) && e.key.toLowerCase() === "m" && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); applyAudioMute(!isMuted); return; }
   if (fpsActive) return;
   if (e.key.startsWith("Arrow") && !["INPUT", "TEXTAREA"].includes(e.target?.tagName) &&
       !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -168,20 +170,6 @@ document.addEventListener("keydown", function (e) {
     if ((e.key === "n" || e.key === "N") && gameState === "gameover") {
       e.preventDefault(); submitRanking(); return;
     }
-  }
-  if ((e.key === "m" || e.key === "M") && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) {
-    e.preventDefault();
-    isMuted = !isMuted;
-    for (const sound of [...Object.values(soundEffects), backgroundMusic]) {
-      if (!sound) continue;
-      sound.muted = isMuted;
-      if (isMuted) {
-        try { sound.pause(); sound.currentTime = 0; } catch {}
-      }
-    }
-    if (!isMuted) startBackgroundMusic();
-    syncMenuMusic();
-    return;
   }
   if (gameState === "start") {
     // 운영체제 단축키와 보조 키만 누른 경우는 시작 입력에서 제외합니다.
@@ -943,7 +931,7 @@ function gameLoop(timestamp) {
     updateEnemyCount();
     updateDrones();
     checkEnemyCollisions(now);
-    collectCores();
+    if (gameState === "playing") collectCores();
     walkFrame = player.moving ? Math.floor(timestamp / 180) % 2 : 0;
     sideWalkFrame = player.moving ? Math.floor(timestamp / sideWalkFrameMs) % 2 : 0;
     if (gameState === "playing") motionFrame = Math.floor(timestamp / 160) % 3;
@@ -951,6 +939,10 @@ function gameLoop(timestamp) {
 
   // ③ 그리기: 배경, 캐릭터, 아이템, HUD를 다시 그립니다.
   draw();
+  const recordText='점수 '+score+' · 체력 '+health+'/'+maxHealth+' · '+elapsedSeconds+'초';
+  const recordLabel=document.getElementById('neonStatus');if(recordLabel.textContent!==recordText)recordLabel.textContent=recordText;
+  document.getElementById('neonTouchSubmit').disabled=gameState!=='gameover'||rankSubmitted||rankSubmitting;
+  document.getElementById('neonTouchPause').textContent=gameState==='paused'?'▶':'Ⅱ';
 
   // ④ 다음 프레임 예약: 루프는 이 한 곳에서만 반복합니다.
   requestAnimationFrame(gameLoop);
@@ -990,6 +982,8 @@ function selectMenuGame(step) {
     button.setAttribute("aria-pressed", String(i === selectedMenuGame));
   });
   const game = menuGames[selectedMenuGame];
+  document.getElementById("menuLaunch").disabled = !game.ready;
+  document.getElementById("menuLaunch").textContent = game.ready ? "START · 게임 시작" : "준비 중";
   const preview = document.getElementById("menuPreview");
   preview.querySelector("span").textContent = game.title;
   preview.classList.toggle("pending", !game.ready);
@@ -999,25 +993,24 @@ function selectMenuGame(step) {
   document.getElementById("menuStatus").textContent = "↑ ↓ SELECT　 ENTER START";
 }
 function launchMenuGame() {
+  if (!menuGames[selectedMenuGame].ready) { document.getElementById("menuStatus").textContent = "준비 중입니다 · 다른 게임을 선택해 주세요"; return; }
   menuMusic.pause();
-  if(matchMedia("(pointer:coarse)").matches||navigator.maxTouchPoints>0)document.body.classList.add("touch-play");
   if (selectedMenuGame === 1) {
-    pauseGame(); stopBackgroundMusic(); releaseKeys(); fpsActive = true;
+    pauseGame(); stopBackgroundMusic(); releaseKeys(); fpsActive = true; applyTouchLayout();
     document.getElementById("arcadeMenu").hidden = true;
     document.getElementById("gameConsole").hidden = true;
     document.getElementById("fpsConsole").hidden = false;
     const frame = document.getElementById("fpsFrame");
-    if (!frame.getAttribute("src")) frame.src = "fps/index.html";
+    if (!frame.getAttribute("src")) frame.src = "fps/index.html?v=20261105";
+    else syncFpsPreferences();
     document.getElementById("menuButton").disabled = false;
     document.getElementById("pauseButton").disabled = false;
     document.getElementById("menuUp").disabled = true;
     document.getElementById("menuDown").disabled = true;
     return;
   }
-  if (!menuGames[selectedMenuGame].ready) {
-    document.getElementById("menuStatus").textContent = "준비 중입니다 · 다른 게임을 선택해 주세요";
-    return;
-  }
+
+  applyTouchLayout(true);
   document.getElementById("arcadeMenu").hidden = true;
   document.getElementById("gameConsole").hidden = false;
   document.getElementById("menuButton").disabled = false;
@@ -1033,7 +1026,7 @@ menuGames.forEach((game, i) => document.getElementById(game.id).addEventListener
 document.getElementById("menuUp").addEventListener("click", () => selectMenuGame(-1));
 document.getElementById("menuDown").addEventListener("click", () => selectMenuGame(1));
 document.getElementById("arcadeStart").addEventListener("click", function () {
-  if (fpsActive) { document.getElementById("fpsFrame").contentWindow.postMessage({type:"void-pause"},location.origin); return; }
+  if (fpsActive) { document.getElementById("fpsFrame").contentWindow.postMessage({type:"void-toggle-pause"},location.origin); return; }
   if (!document.getElementById("arcadeMenu").hidden) launchMenuGame();
   else if (gameState === "playing") pauseGame();
   else if (gameState === "paused") resumeGame();
@@ -1041,12 +1034,12 @@ document.getElementById("arcadeStart").addEventListener("click", function () {
   canvas.focus({ preventScroll: true });
 });
 document.getElementById("pauseButton").addEventListener("click", function () {
-  if (fpsActive) { document.getElementById("fpsFrame").contentWindow.postMessage({type:"void-pause"},location.origin); return; }
+  if (fpsActive) { document.getElementById("fpsFrame").contentWindow.postMessage({type:"void-toggle-pause"},location.origin); return; }
   if (gameState === "playing") pauseGame(); else resumeGame();
   canvas.focus({ preventScroll: true });
 });
 document.getElementById("menuButton").addEventListener("click", function () {
-  document.body.classList.remove("touch-play");
+  document.body.classList.remove("touch-play", "fps-playing");
   if (fpsActive) { document.getElementById("fpsFrame").contentWindow.postMessage({type:"void-pause"},location.origin); fpsActive = false; document.getElementById("fpsConsole").hidden = true; }
   pauseGame(); showNicknameForm(false);
   document.getElementById("arcadeMenu").hidden = false;
@@ -1055,7 +1048,7 @@ document.getElementById("menuButton").addEventListener("click", function () {
   document.getElementById("pauseButton").disabled = true;
   document.getElementById("menuUp").disabled = false;
   document.getElementById("menuDown").disabled = false;
-  selectMenuGame(-selectedMenuGame);
+  selectMenuGame(0);
   document.getElementById("menuStatus").textContent = gameState === "paused" ? "START를 눌러 이전 게임으로 돌아가기" : "↑ ↓ SELECT　 ENTER START";
   document.getElementById("arcadeStart").focus();
 });
@@ -1070,13 +1063,40 @@ document.addEventListener("keydown",syncMenuMusic);
 document.addEventListener("visibilitychange",syncMenuMusic);
 
 let coinAudio;
-document.getElementById("coinInsert").addEventListener("click",function(){try{coinAudio ||= new AudioContext();coinAudio.resume();[1175,1760,2349].forEach((f,i)=>{const o=coinAudio.createOscillator(),g=coinAudio.createGain(),t=coinAudio.currentTime+i*.07;o.type='square';o.frequency.value=f;g.gain.setValueAtTime(isMuted?0:.035,t);g.gain.exponentialRampToValueAtTime(.0001,t+.12);o.connect(g).connect(coinAudio.destination);o.start(t);o.stop(t+.13);});this.classList.remove('coin-flash');void this.offsetWidth;this.classList.add('coin-flash');}catch{}});
+document.getElementById("coinInsert").addEventListener("click",function(){try{if(!isMuted){coinAudio ||= new AudioContext();coinAudio.resume();[1175,1760,2349].forEach((f,i)=>{const o=coinAudio.createOscillator(),g=coinAudio.createGain(),t=coinAudio.currentTime+i*.07;o.type='square';o.frequency.value=f;g.gain.setValueAtTime(isMuted?0:.035,t);g.gain.exponentialRampToValueAtTime(.0001,t+.12);o.connect(g).connect(coinAudio.destination);o.start(t);o.stop(t+.13);});}this.classList.remove('coin-flash');void this.offsetWidth;this.classList.add('coin-flash');}catch{}});
 
 const neonPad=document.getElementById('neonPad');let neonPointer=null;
 function resetNeonPad(){neonPointer=null;neonPad.querySelector('i').style.transform='translate(0,0)';releaseKeys();}
 function moveNeonPad(e){if(e.pointerId!==neonPointer)return;const r=neonPad.getBoundingClientRect();let x=(e.clientX-r.left-r.width/2)/(r.width*.32),y=(e.clientY-r.top-r.height/2)/(r.height*.32);const l=Math.max(1,Math.hypot(x,y));x/=l;y/=l;neonPad.querySelector('i').style.transform='translate('+x*28+'px,'+y*28+'px)';for(const [k,v] of Object.entries({ArrowLeft:x<-.2,ArrowRight:x>.2,ArrowUp:y<-.2,ArrowDown:y>.2})){keys[k]=gameState==='playing'&&v;joystickKeys[k]=v;}updateJoystick();}
 neonPad.addEventListener('pointerdown',e=>{if(neonPointer!==null)return;e.preventDefault();neonPointer=e.pointerId;neonPad.setPointerCapture(e.pointerId);moveNeonPad(e);});neonPad.addEventListener('pointermove',moveNeonPad);for(const event of ['pointerup','pointercancel','lostpointercapture'])neonPad.addEventListener(event,e=>{if(e.pointerId===neonPointer)resetNeonPad();});
 document.getElementById('neonTouchPause').onclick=()=>{if(gameState==='playing')pauseGame();else if(gameState==='paused')resumeGame();resetNeonPad();};document.getElementById('neonTouchRestart').onclick=()=>{resetNeonPad();resetGame();};
-document.getElementById('menuSound').onclick=function(){isMuted=!isMuted;this.textContent=isMuted?'음악 OFF':'음악 ON';for(const sound of [...Object.values(soundEffects),backgroundMusic])if(sound)sound.muted=isMuted;syncMenuMusic();if(!isMuted)startBackgroundMusic();};
 
-document.getElementById('touchMode').onclick=()=>document.body.classList.toggle('touch-play');
+function applyAudioMute(value, notifyFrame=true) {
+  isMuted=Boolean(value);try{localStorage.setItem('neonArcadeMuted',String(isMuted));}catch{}
+  for(const sound of [...Object.values(soundEffects),backgroundMusic,menuMusic])if(sound)sound.muted=isMuted;
+  const button=document.getElementById('menuSound');button.textContent=isMuted?'소리 OFF':'소리 ON';button.setAttribute('aria-pressed',String(isMuted));
+  syncMenuMusic();if(isMuted)stopBackgroundMusic();else if(!fpsActive)startBackgroundMusic();
+  if(notifyFrame)syncFpsPreferences();
+}
+let touchPreference=matchMedia('(pointer:coarse)').matches||navigator.maxTouchPoints>0;
+function applyTouchLayout(launching=false){
+  const active=launching||fpsActive||document.getElementById('arcadeMenu').hidden;
+  document.body.classList.toggle('touch-play',touchPreference&&active);
+  document.body.classList.toggle('fps-playing',fpsActive);
+  document.getElementById('touchMode').setAttribute('aria-pressed',String(touchPreference));
+  syncFpsPreferences();
+}
+function syncFpsPreferences(){const frame=document.getElementById('fpsFrame');if(frame.getAttribute('src'))frame.contentWindow.postMessage({type:'arcade-preferences',muted:isMuted,touch:touchPreference},location.origin);}
+document.getElementById('menuSound').onclick=()=>applyAudioMute(!isMuted);
+document.getElementById('touchMode').onclick=()=>{resetNeonPad();touchPreference=!touchPreference;applyTouchLayout();};
+document.getElementById('menuLaunch').onclick=launchMenuGame;
+document.getElementById('fpsFrame').addEventListener('load',syncFpsPreferences);
+window.addEventListener('message',e=>{
+  if(e.origin!==location.origin||e.source!==document.getElementById('fpsFrame').contentWindow)return;
+  if(e.data?.type==='void-audio')applyAudioMute(e.data.muted,false);
+  if(e.data?.type==='void-state'&&fpsActive){const mode=e.data.mode;document.getElementById('pauseButton').textContent=mode==='paused'?'▶ 재개':['dead','won'].includes(mode)?'다시 시작':'Ⅱ 일시정지';}
+});
+applyAudioMute(isMuted);applyTouchLayout();
+
+document.getElementById('neonTouchRanks').onclick=()=>{if(gameState==='playing')pauseGame();showLeaderboard=!showLeaderboard;if(showLeaderboard)loadLeaderboard();};
+document.getElementById('neonTouchSubmit').onclick=()=>{if(gameState==='gameover')submitRanking();};

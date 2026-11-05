@@ -7,3 +7,32 @@
 #reloadProgress{position:fixed;bottom:21%;left:50%;transform:translateX(-50%);width:150px;pointer-events:none;text-align:center;font-size:10px;color:#e9c383}#reloadProgress>div{height:5px;background:#151b23;margin-top:7px}#reloadBar{display:block;height:100%;background:#e7ac60}#reloadProgress[hidden]{display:none}
 
 #touchControls{display:none;position:fixed;inset:0;pointer-events:none;z-index:3}.touch-controls #touchControls{display:block}.touch-controls #view canvas{touch-action:none}#fpsPad{position:absolute;left:20px;bottom:86px;width:110px;height:110px;border-radius:50%;border:2px solid #c9d6dd88;background:#15243388;display:grid;place-items:center;pointer-events:auto;touch-action:none}#fpsPad i{width:43px;height:43px;border-radius:50%;background:#c2d0db88;pointer-events:none}#touchFire{position:absolute;right:22px;bottom:100px;width:78px;height:78px;border-radius:50%;background:#a8432ac9;color:#ffe2bb;font-weight:bold;pointer-events:auto;touch-action:none}.touch-tools{position:absolute;left:50%;bottom:78px;transform:translateX(-50%);display:flex;gap:7px;pointer-events:auto}.touch-tools button{padding:9px;min-height:42px;touch-action:manipulation;background:#18242cbd}.touch-controls #hud{padding:10px 14px}.touch-controls #hud strong{font-size:20px}.touch-controls .controls{font-size:9px}.touch-controls #map{width:93px;height:75px;top:90px}.touch-controls #waypoint{top:45px}.touch-controls #prompt{bottom:30%}.touch-controls #reloadProgress{bottom:35%}@media(max-width:500px){.touch-tools{bottom:80px}.touch-tools button{font-size:9px;padding:6px}#fpsPad{width:96px;height:96px;left:14px;bottom:140px}#touchFire{right:15px;bottom:145px;width:70px;height:70px}#overlay{padding:14px}.touch-controls header{gap:5px}.touch-controls #objective{font-size:8px}}
+
+/* Mobile HUD separates navigation, combat feedback, and thumb targets. */
+body{color-scheme:dark}::selection{background:#e7ac60;color:#13191e}
+header{padding-top:max(10px,env(safe-area-inset-top));padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right));gap:8px}
+header button{min-height:36px;min-width:44px;font-size:11px;padding:7px 9px}
+button[aria-pressed=true]{border-color:#ffd28b;color:#ffd28b}
+#overlay{overflow:auto;overscroll-behavior:contain;justify-content:safe center;padding:max(20px,env(safe-area-inset-top)) 20px max(20px,env(safe-area-inset-bottom))}
+#overlay p{max-width:46ch}.controls{font-size:12px;line-height:1.9}#overlay button{min-height:44px}#loadStatus{font-size:11px;line-height:1.6}#back{font-size:13px}#notice{font-size:12px;line-height:1.6;padding:0 16px}
+#map{top:64px}#waypoint{top:66px}#hud{padding-bottom:max(12px,env(safe-area-inset-bottom));font-variant-numeric:tabular-nums}
+.touch-tools button{min-width:48px;min-height:46px;font-size:12px;padding:10px 12px}.touch-tools{gap:8px;bottom:max(76px,calc(env(safe-area-inset-bottom) + 60px))}
+.touch-controls #hud{padding-bottom:max(12px,env(safe-area-inset-bottom))}.touch-controls #hud div{min-width:0}.touch-controls #hud small{font-size:9px;letter-spacing:1px}.touch-controls #hud strong{font-size:22px}
+.touch-controls #fpsPad{left:max(18px,env(safe-area-inset-left));width:110px;height:110px}.touch-controls #touchFire{right:max(18px,env(safe-area-inset-right));width:80px;height:80px;font-size:15px}
+@media(max-width:500px){
+  header{gap:5px;padding:8px max(8px,env(safe-area-inset-right)) 8px max(8px,env(safe-area-inset-left));flex-wrap:wrap}
+  #objective{flex:1;font-size:10px}header button{min-height:40px;font-size:10px;padding:8px;min-width:44px}
+  #map,.touch-controls #map{right:10px;top:112px;width:78px;height:63px}#waypoint,.touch-controls #waypoint{top:64px;font-size:11px;max-width:92vw;white-space:normal;padding:7px 10px}
+  .touch-controls #fpsPad{bottom:max(145px,calc(env(safe-area-inset-bottom) + 130px))}.touch-controls #touchFire{bottom:max(155px,calc(env(safe-area-inset-bottom) + 140px))}
+  .touch-tools{width:calc(100% - 36px);justify-content:center;gap:8px}.touch-tools button{flex:1;max-width:78px;font-size:12px;padding:10px 5px}.touch-controls #prompt{bottom:36%}.touch-controls #reloadProgress{bottom:42%}
+  #overlay{padding:24px 18px}#overlay h1{font-size:56px;letter-spacing:4px}#overlay p{font-size:13px}.controls{font-size:12px}#hud{gap:6px;padding-inline:12px}#hud div{min-width:0}#hud small{font-size:9px;letter-spacing:.5px}#hud strong{font-size:22px}
+}
+@media(orientation:landscape) and (max-height:500px){
+  header button{min-height:32px}header{padding-block:5px}#waypoint,.touch-controls #waypoint{top:48px;font-size:11px}#map,.touch-controls #map{top:52px;width:78px;height:63px}
+  #overlay{padding:14px 24px}#overlay h1{font-size:42px;letter-spacing:3px;margin:6px 0}#overlay p{margin:5px 0;font-size:11px;line-height:1.6}#overlay button{padding:7px 14px;min-height:34px;margin:3px}#loadStatus{font-size:10px}
+  .touch-tools{bottom:60px;gap:8px}.touch-tools button{font-size:11px;min-height:40px;padding:8px 12px}.touch-controls #fpsPad{bottom:63px;width:96px;height:96px}.touch-controls #touchFire{bottom:68px;width:72px;height:72px}.touch-controls #hud strong{font-size:20px}
+}
+
+#hud small,.touch-controls #hud small,#reloadProgress{font-size:11px;letter-spacing:.5px}#dragMode{font-size:12px}header #objective{font-size:11px}
+
+@media(max-width:500px){header button{font-size:11px}}
