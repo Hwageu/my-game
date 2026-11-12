@@ -1006,7 +1006,7 @@ function launchMenuGame() {
     document.getElementById("fpsConsole").hidden = selectedMenuGame!==1;
     document.getElementById("cursedConsole").hidden = selectedMenuGame!==2;
     const frame = embeddedFrame();
-    if (!frame.getAttribute("src")) frame.src = selectedMenuGame===2 ? "cursed/index.html?v=20261105-curse" : "fps/index.html?v=20261105-audio";
+    if (!frame.getAttribute("src")) frame.src = selectedMenuGame===2 ? "cursed/index.html?v=20261112-polish" : "fps/index.html?v=20261105-audio";
     else syncEmbeddedPreferences();
     document.getElementById("menuButton").disabled = false;
     document.getElementById("pauseButton").disabled = false;

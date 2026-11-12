@@ -12,3 +12,5 @@ Mode: Experience. The arena and readable attack timing lead; the interface reced
 - Particles are bounded; reduced motion removes screen shake. New assets are authored by the project; no third-party art or music is used.
 
 One-handed play is primary. The character stays in the arena centre. The player aims and parries: touch drag direction + release, or mouse aim + click. A 130-degree guard arc makes facing readable. Sword attacks are automatic in the chosen direction. All enemy attacks, including the king's shockwave, can be parried; there are no unavoidable floor attacks. Arrow keys/WASD aim and Space parries as an alternate scheme.
+
+The arena retains at least 600 logical pixels of height in wide windows. Canvas input covers the viewport while rendering fits the arena without stretching; mouse aiming accounts for the fitted offset. Wounded players collect homing recovery embers automatically. Combat pauses when the logical arena changes size. Modal controls receive keyboard focus and keep Tab navigation inside the active dialog.
