@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>NEON ARCADE · 게임 선택</title>
-  <link rel="stylesheet" href="style.css?v=20261112-polish">
+  <link rel="stylesheet" href="style.css?v=20261119-audit">
 </head>
 <body>
   <section id="arcadeCabinet" class="arcade-menu" aria-label="네온 아케이드 오락기">
@@ -36,12 +36,13 @@
     <div class="cabinet-front"><button type="button" id="coinInsert" class="coin-door" aria-label="동전 넣기"><span>COIN</span><i></i><b>25¢</b><span class="coin-return"></span></button><span class="cabinet-badge">NEON<br><b>ARCADE SYSTEM</b></span></div>
     <p class="platform-note">PC 키보드·마우스 / 모바일 전용 터치 조작</p>
   </section>
-  <form id="rankForm" hidden>
-    <label for="nickname">공개 닉네임 (1~8자)</label>
-    <input id="nickname" name="nickname" maxlength="8" placeholder="익명" autocomplete="off" aria-describedby="rankPrivacy">
+  <form id="rankForm" role="dialog" aria-modal="true" aria-labelledby="rankLabel" hidden>
+    <label id="rankLabel" for="nickname">공개 닉네임 (1~8자)</label>
+    <input id="nickname" name="nickname" maxlength="8" placeholder="익명" autocomplete="off" aria-describedby="rankPrivacy rankError">
     <p id="rankPrivacy">실명·학번·연락처를 입력하지 마세요. 닉네임과 점수가 공개됩니다.</p>
+    <p id="rankError" role="alert" hidden></p>
     <button type="submit">기록 등록</button><button type="button" id="cancelRank">취소</button>
   </form>
-  <script src="script.js?v=20261112-polish"></script>
+  <script src="script.js?v=20261119-audit"></script>
 </body>
 </html>

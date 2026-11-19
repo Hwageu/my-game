@@ -139,13 +139,20 @@ let pendingImages = 6;
 const controlKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "];
 document.addEventListener("keydown", function (e) {
   if (!["INPUT", "TEXTAREA"].includes(e.target?.tagName) && e.key.toLowerCase() === "m" && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); applyAudioMute(!isMuted); return; }
-  if (embeddedActive) return;
+  if (embeddedActive) {
+    if (!e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && ['escape', 'p'].includes(e.key.toLowerCase())) {
+      e.preventDefault();
+      embeddedFrame().contentWindow.postMessage({type:'void-pause-shortcut'}, location.origin);
+    }
+    return;
+  }
   if (e.key.startsWith("Arrow") && !["INPUT", "TEXTAREA"].includes(e.target?.tagName) &&
       !e.ctrlKey && !e.metaKey && !e.altKey) {
     joystickKeys[e.key] = true;
     updateJoystick();
   }
   if (!document.getElementById("arcadeMenu").hidden) {
+    if (e.target instanceof HTMLButtonElement && ["Enter", " "].includes(e.key)) return;
     if (["ArrowUp", "ArrowDown", "Enter", " "].includes(e.key)) {
       e.preventDefault();
       if (e.key === "ArrowUp") selectMenuGame(-1);
@@ -157,12 +164,11 @@ document.addEventListener("keydown", function (e) {
   if (["INPUT", "TEXTAREA", "BUTTON"].includes(e.target?.tagName)) return;
   if ((e.key === "Escape" || e.key.toLowerCase() === "p") && !e.repeat) {
     e.preventDefault();
-    if (gameState === "playing") pauseGame(); else if (gameState === "paused") resumeGame();
+    if (gameState === "playing" || gameState === "countdown") pauseGame();
+    else if (gameState === "paused") resumeGame();
     return;
   }
-  if (gameState === "paused" || gameState === "countdown") {
-    if (e.key.toLowerCase() !== "m") return;
-  }
+  if (gameState === "countdown") return;
   if (!e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && gameState !== "playing") {
     if (e.key === "l" || e.key === "L") {
       e.preventDefault(); showLeaderboard = !showLeaderboard;
@@ -192,7 +198,7 @@ document.addEventListener("keydown", function (e) {
     resetGame();
     return;
   }
-  if (controlKeys.includes(e.key)) {
+  if (gameState === "playing" && controlKeys.includes(e.key)) {
     e.preventDefault();
     keys[e.key] = true;
   }
@@ -207,7 +213,6 @@ document.addEventListener("keyup", function (e) {
     updateJoystick();
   }
   if (controlKeys.includes(e.key)) {
-    e.preventDefault();
     keys[e.key] = false;
   }
 });
@@ -215,7 +220,11 @@ document.addEventListener("keyup", function (e) {
 // 탭을 바꾸거나 창 밖에서 손을 뗐을 때 계속 이동하는 현상을 막습니다.
 window.addEventListener("blur", function () { releaseKeys(); pauseGame(); });
 document.addEventListener("visibilitychange", function () {
-  if (document.hidden) { releaseKeys(); pauseGame(); }
+  if (document.hidden) {
+    releaseKeys();
+    pauseGame();
+    if (embeddedActive) embeddedFrame().contentWindow.postMessage({type:'void-pause'}, location.origin);
+  }
 });
 
 const rankForm = document.getElementById("rankForm");
@@ -224,6 +233,13 @@ if (rankForm) {
     e.preventDefault(); submitRanking(document.getElementById("nickname").value);
   });
   document.getElementById("cancelRank").addEventListener("click", function () { showNicknameForm(false); });
+  rankForm.addEventListener("keydown", event => {
+    if (event.key === "Escape") showNicknameForm(false);
+  });
+  document.getElementById("nickname").addEventListener("input", () => {
+    document.getElementById("rankError").hidden = true;
+    document.getElementById("nickname").removeAttribute("aria-invalid");
+  });
 }
 
 // ===== ④. 함수들 — 계산과 화면 표시 =====
@@ -305,8 +321,14 @@ async function loadLeaderboard() {
 function showNicknameForm(show) {
   const form = document.getElementById("rankForm");
   if (!form) return;
+  const wasOpen = !form.hidden;
   form.hidden = !show;
-  if (show) document.getElementById("nickname").focus();
+  document.getElementById("arcadeCabinet").inert = show;
+  const nickname = document.getElementById("nickname");
+  nickname.removeAttribute("aria-invalid");
+  document.getElementById("rankError").hidden = true;
+  if (show) nickname.focus();
+  else if (wasOpen && !document.getElementById("gameConsole").hidden) canvas.focus({preventScroll:true});
 }
 async function submitRanking(input) {
   if (gameState !== "gameover" || rankSubmitting || rankSubmitted) return;
@@ -315,7 +337,13 @@ async function submitRanking(input) {
   if (typeof input !== "string") { showNicknameForm(true); return; }
   const name = input.trim() || "익명";
   if (!/^[\p{L}\p{N}_ -]{1,8}$/u.test(name)) {
-    rankingStatus = "닉네임은 글자·숫자·공백·_- 1~8자"; showLeaderboard = true; return;
+    const error = document.getElementById("rankError");
+    const nickname = document.getElementById("nickname");
+    error.textContent = "닉네임은 글자, 숫자, 공백, 밑줄, 하이픈으로 1~8자까지 쓸 수 있습니다.";
+    error.hidden = false;
+    nickname.setAttribute("aria-invalid", "true");
+    nickname.focus();
+    return;
   }
   showNicknameForm(false);
   const submittedRun = runId;
@@ -771,6 +799,7 @@ function formatTime(seconds) {
 }
 // 새 루프를 만들지 않고, 이번 판의 값만 처음 상태로 되돌립니다.
 function resetGame() {
+  neonAccumulator = 0;
   stopBackgroundMusic();
   pauseStartedAt = 0; pausedDuration = 0; resumeDeadline = 0;
   showNicknameForm(false);
@@ -907,7 +936,14 @@ function draw() {
   drawLeaderboard();
 }
 
+const neonStep = 1000 / 60;
+let neonLastFrame;
+let neonAccumulator = 0;
+
 function gameLoop(timestamp) {
+  const frameTime = neonLastFrame === undefined ? 0 : Math.min(100, timestamp - neonLastFrame);
+  neonLastFrame = timestamp;
+  if (gameState !== "playing") neonAccumulator = 0;
   // 메뉴에서는 보이지 않는 게임 화면을 반복해서 그리지 않습니다.
   if (embeddedActive || !document.getElementById("arcadeMenu").hidden) {
     requestAnimationFrame(gameLoop);
@@ -927,13 +963,17 @@ function gameLoop(timestamp) {
     const now = gameNow();
     if (startTime === null) startTime = now;
     elapsedSeconds = Math.max(0, Math.floor((now - startTime) / 1000));
-    updatePlayer();
-    updateCamera();
-    updateMapItems();
-    updateEnemyCount();
-    updateDrones();
-    checkEnemyCollisions(now);
-    if (gameState === "playing") collectCores();
+    neonAccumulator += frameTime;
+    while (neonAccumulator + 0.0001 >= neonStep && gameState === "playing") {
+      neonAccumulator -= neonStep;
+      updatePlayer();
+      updateCamera();
+      updateMapItems();
+      updateEnemyCount();
+      updateDrones();
+      checkEnemyCollisions(now);
+      if (gameState === "playing") collectCores();
+    }
     walkFrame = player.moving ? Math.floor(timestamp / 180) % 2 : 0;
     sideWalkFrame = player.moving ? Math.floor(timestamp / sideWalkFrameMs) % 2 : 0;
     if (gameState === "playing") motionFrame = Math.floor(timestamp / 160) % 3;
@@ -1006,10 +1046,11 @@ function launchMenuGame() {
     document.getElementById("fpsConsole").hidden = selectedMenuGame!==1;
     document.getElementById("cursedConsole").hidden = selectedMenuGame!==2;
     const frame = embeddedFrame();
-    if (!frame.getAttribute("src")) frame.src = selectedMenuGame===2 ? "cursed/index.html?v=20261112-polish" : "fps/index.html?v=20261105-audio";
+    if (!frame.getAttribute("src")) frame.src = selectedMenuGame===2 ? "cursed/index.html?v=20261119-audit" : "fps/index.html?v=20261119-audit";
     else syncEmbeddedPreferences();
     document.getElementById("menuButton").disabled = false;
     document.getElementById("pauseButton").disabled = false;
+    document.getElementById("pauseButton").textContent = "시작";
     document.getElementById("menuUp").disabled = true;
     document.getElementById("menuDown").disabled = true;
     return;
@@ -1033,19 +1074,19 @@ document.getElementById("menuDown").addEventListener("click", () => selectMenuGa
 document.getElementById("arcadeStart").addEventListener("click", function () {
   if (embeddedActive) { embeddedFrame().contentWindow.postMessage({type:"void-toggle-pause"},location.origin); return; }
   if (!document.getElementById("arcadeMenu").hidden) launchMenuGame();
-  else if (gameState === "playing") pauseGame();
+  else if (gameState === "playing" || gameState === "countdown") pauseGame();
   else if (gameState === "paused") resumeGame();
   else if (gameState === "gameover") resetGame();
   canvas.focus({ preventScroll: true });
 });
 document.getElementById("pauseButton").addEventListener("click", function () {
   if (embeddedActive) { embeddedFrame().contentWindow.postMessage({type:"void-toggle-pause"},location.origin); return; }
-  if (gameState === "playing") pauseGame(); else resumeGame();
+  if (gameState === "playing" || gameState === "countdown") pauseGame(); else resumeGame();
   canvas.focus({ preventScroll: true });
 });
 document.getElementById("menuButton").addEventListener("click", function () {
   document.body.classList.remove("touch-play", "fps-playing");
-  if (embeddedActive) { embeddedFrame().contentWindow.postMessage({type:"void-pause"},location.origin); embeddedActive = false; document.getElementById("fpsConsole").hidden = true; document.getElementById("cursedConsole").hidden=true; }
+  if (embeddedActive) { embeddedFrame().contentWindow.postMessage({type:"void-cover"},location.origin); embeddedActive = false; document.getElementById("fpsConsole").hidden = true; document.getElementById("cursedConsole").hidden=true; }
   pauseGame(); showNicknameForm(false);
   document.getElementById("arcadeMenu").hidden = false;
   document.getElementById("gameConsole").hidden = true;
@@ -1054,7 +1095,6 @@ document.getElementById("menuButton").addEventListener("click", function () {
   document.getElementById("menuUp").disabled = false;
   document.getElementById("menuDown").disabled = false;
   selectMenuGame(0);
-  document.getElementById("menuStatus").textContent = gameState === "paused" ? "START를 눌러 이전 게임으로 돌아가기" : "↑ ↓ SELECT　 ENTER START";
   document.getElementById("arcadeStart").focus();
 });
 
@@ -1074,7 +1114,7 @@ const neonPad=document.getElementById('neonPad');let neonPointer=null;
 function resetNeonPad(){neonPointer=null;neonPad.querySelector('i').style.transform='translate(0,0)';releaseKeys();}
 function moveNeonPad(e){if(e.pointerId!==neonPointer)return;const r=neonPad.getBoundingClientRect();let x=(e.clientX-r.left-r.width/2)/(r.width*.32),y=(e.clientY-r.top-r.height/2)/(r.height*.32);const l=Math.max(1,Math.hypot(x,y));x/=l;y/=l;neonPad.querySelector('i').style.transform='translate('+x*28+'px,'+y*28+'px)';for(const [k,v] of Object.entries({ArrowLeft:x<-.2,ArrowRight:x>.2,ArrowUp:y<-.2,ArrowDown:y>.2})){keys[k]=gameState==='playing'&&v;joystickKeys[k]=v;}updateJoystick();}
 neonPad.addEventListener('pointerdown',e=>{if(neonPointer!==null)return;e.preventDefault();neonPointer=e.pointerId;neonPad.setPointerCapture(e.pointerId);moveNeonPad(e);});neonPad.addEventListener('pointermove',moveNeonPad);for(const event of ['pointerup','pointercancel','lostpointercapture'])neonPad.addEventListener(event,e=>{if(e.pointerId===neonPointer)resetNeonPad();});
-document.getElementById('neonTouchPause').onclick=()=>{if(gameState==='playing')pauseGame();else if(gameState==='paused')resumeGame();resetNeonPad();};document.getElementById('neonTouchRestart').onclick=()=>{resetNeonPad();resetGame();};
+document.getElementById('neonTouchPause').onclick=()=>{if(gameState==='playing'||gameState==='countdown')pauseGame();else if(gameState==='paused')resumeGame();resetNeonPad();};document.getElementById('neonTouchRestart').onclick=()=>{resetNeonPad();resetGame();};
 
 function applyAudioMute(value, notifyFrame=true) {
   isMuted=Boolean(value);try{localStorage.setItem('neonArcadeMuted',String(isMuted));}catch{}
@@ -1091,15 +1131,15 @@ function applyTouchLayout(launching=false){
   document.getElementById('touchMode').setAttribute('aria-pressed',String(touchPreference));
   syncEmbeddedPreferences();
 }
-function syncEmbeddedPreferences(){for(const id of ['fpsFrame','cursedFrame']){const frame=document.getElementById(id);if(frame.getAttribute('src'))frame.contentWindow.postMessage({type:'arcade-preferences',muted:isMuted,touch:touchPreference},location.origin);}}
+function syncEmbeddedPreferences(){for(const id of ['fpsFrame','cursedFrame']){const frame=document.getElementById(id);if(frame.getAttribute('src'))frame.contentWindow.postMessage({type:'arcade-preferences',muted:isMuted,touch:touchPreference,active:embeddedActive&&frame===embeddedFrame()},location.origin);}}
 document.getElementById('menuSound').onclick=()=>applyAudioMute(!isMuted);
 document.getElementById('touchMode').onclick=()=>{resetNeonPad();touchPreference=!touchPreference;applyTouchLayout();};
 document.getElementById('menuLaunch').onclick=launchMenuGame;
 for(const id of ['fpsFrame','cursedFrame'])document.getElementById(id).addEventListener('load',syncEmbeddedPreferences);
 window.addEventListener('message',e=>{
   if(e.origin!==location.origin||e.source!==embeddedFrame().contentWindow)return;
-  if(e.data?.type==='void-audio')applyAudioMute(e.data.muted,false);
-  if(e.data?.type==='void-state'&&embeddedActive){const mode=e.data.mode;document.getElementById('pauseButton').textContent=mode==='upgrade'?'강화 선택':mode==='paused'?'▶ 재개':mode==='won'?(e.data.lastStage?'처음부터':'다음 구역'):mode==='dead'?'다시 시작':'Ⅱ 일시정지';}
+  if(e.data?.type==='void-audio'&&embeddedActive)applyAudioMute(e.data.muted);
+  if(e.data?.type==='void-state'&&embeddedActive){const mode=e.data.mode;document.getElementById('pauseButton').textContent=mode==='title'?'시작':mode==='upgrade'?'강화 선택':mode==='countdown'?'재개 준비 중':mode==='paused'?'▶ 재개':mode==='won'?(e.data.lastStage?'처음부터':'다음 구역'):mode==='dead'?'다시 시작':'Ⅱ 일시정지';}
 });
 applyAudioMute(isMuted);applyTouchLayout();
 

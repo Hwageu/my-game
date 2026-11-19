@@ -111,7 +111,7 @@ export class Game{
     else if(this.stage<2){this.mode='stageclear';this.countdown=3;this.emit('stageclear');}
     else{this.mode='won';this.score+=1000;this.emit('won');}
   }
-  update(real,input={}){real=clamp(real,0,.05);this.flash=Math.max(0,this.flash-real);this.hurtFlash=Math.max(0,this.hurtFlash-real);if(this.mode==='countdown'){this.countdown-=real;if(this.countdown<=0){this.mode='playing';this.emit('continue');}return;}if(this.mode==='stageclear'){this.countdown-=real;if(this.countdown<=0){this.mode='playing';this.loadStage(this.stage+1);}return;}if(this.mode!=='playing')return;
+  update(real,input={}){const elapsed=Math.max(0,real);real=Math.min(elapsed,.05);this.flash=Math.max(0,this.flash-real);this.hurtFlash=Math.max(0,this.hurtFlash-real);if(this.mode==='countdown'){this.countdown-=elapsed;if(this.countdown<=0){this.mode='playing';this.emit('continue');}return;}if(this.mode==='stageclear'){this.countdown-=real;if(this.countdown<=0){this.mode='playing';this.loadStage(this.stage+1);}return;}if(this.mode!=='playing')return;
     const p=this.player;this.time+=real;this.stageTime+=real;for(const k of ['parryCooldown','slashCooldown','invuln','slash'])p[k]=Math.max(0,p[k]-real);p.parryAge+=real;p.parry=Math.max(0,p.parry-real);this.comboTime-=real;if(this.comboTime<=0)this.combo=0;
     this.slow=Math.max(0,this.slow-real);if(this.hitStop>0){this.hitStop-=real;return;}const dt=real*(this.slow>0?.25:1);
     if(Number.isFinite(input.aimAngle))p.angle=input.aimAngle;else if(input.aim)p.angle=Math.atan2(input.aim.y-p.y,input.aim.x-p.x);else if(input.x||input.y)p.angle=Math.atan2(input.y||0,input.x||0);

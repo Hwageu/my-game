@@ -1,4 +1,4 @@
-import {STAGES} from './engine.js?v=20261112-polish';
+import {STAGES} from './engine.js?v=20261119-audit';
 const pal={ink:'#141319',ivory:'#eee0b9',bone:'#c8ba91',rust:'#aa5b43',gold:'#e6bb73',red:'#9c3f49'};
 const rect=(c,color,x,y,w,h)=>{c.fillStyle=color;c.fillRect(Math.round(x),Math.round(y),w,h);};
 function poly(c,color,points){c.fillStyle=color;c.beginPath();points.forEach(([x,y],i)=>i?c.lineTo(x,y):c.moveTo(x,y));c.closePath();c.fill();}
