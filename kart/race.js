@@ -1,0 +1,301 @@
+import {COUNTDOWN, DRIFT_FIRST, DRIFT_SECOND, LAPS, TOP_SPEED, cancelDrift, createRace, order, stepRace} from './track.js?v=3';
+import {drawRace} from './render.js?v=3';
+
+const $ = id => document.getElementById(id);
+const canvas = $('road'), context = canvas.getContext('2d');
+const controls = [...document.querySelectorAll('[data-drive]')];
+const embedded = parent !== window;
+let touch = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
+let muted = false, active = !embedded, mode = 'title', race = createRace();
+let deadline = 0, goUntil = 0, previous = performance.now(), accumulator = 0, lastSignal = '';
+let best = 0, audio, engine, engineGain;
+try {
+  best = Number(localStorage.getItem('tidelineBestTime')) || 0;
+  muted = localStorage.getItem('neonArcadeMuted') === 'true';
+} catch {}
+
+const keyMap = new Map([
+  ['ArrowLeft','left'],['KeyA','left'],['ArrowRight','right'],['KeyD','right'],
+  ['ArrowDown','brake'],['KeyS','brake'],['ArrowUp','throttle'],['KeyW','throttle'],
+  ['ShiftLeft','drift'],['ShiftRight','drift'],
+]);
+const keys = new Set();
+const pointers = new Map();
+
+function resize() {
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const scale = Math.min(1,520/rect.width,440/rect.height);
+  const width = Math.max(1,Math.round(rect.width*scale));
+  const height = Math.max(1,Math.round(rect.height*scale));
+  if (canvas.width === width && canvas.height === height) return;
+  canvas.width = width;
+  canvas.height = height;
+  context.imageSmoothingEnabled = false;
+}
+new ResizeObserver(resize).observe(canvas);
+
+function clearInput() {
+  keys.clear();
+  cancelDrift(race.player);
+  for (const [pointer,button] of pointers) {
+    if (button.hasPointerCapture(pointer)) button.releasePointerCapture(pointer);
+  }
+  pointers.clear();
+  for (const button of controls) button.dataset.held = 'false';
+}
+
+function readInput() {
+  const held = action => [...keys].some(code => keyMap.get(code) === action) ||
+    [...pointers.values()].some(button => button.dataset.drive === action);
+  return {steer:Number(held('right'))-Number(held('left')), brake:held('brake'), drift:held('drift'), throttle:touch||held('throttle')};
+}
+function report() {
+  if (embedded) parent.postMessage({type:'void-state',mode:mode==='finished'?'won':mode,lastStage:true},location.origin);
+}
+function setOverlay() {
+  const show = ['title','paused','finished'].includes(mode);
+  $('overlay').hidden = !show;
+  $('pause').disabled = !['playing','countdown'].includes(mode);
+  $('touchControls').hidden = !touch || show;
+  $('countdown').hidden = mode !== 'countdown';
+  const title = $('title');
+  if (show) {
+    const onTitle = mode === 'title';
+    title.replaceChildren();
+    if (onTitle) {
+      const gp = document.createElement('span');
+      gp.textContent='GP';
+      title.append('TIDELINE ',gp);
+    } else title.textContent=mode==='paused'?'일시정지':'경주 종료';
+    $('course').textContent=mode==='finished'
+      ? race.finishPlace + '위 / 6대 · ' + formatTime(race.player.finished)
+      : '인디 힐 서킷 · 6대 · 2바퀴';
+    $('help').hidden = !onTitle;
+    $('help').textContent = touch
+      ? '자동 가속 · 좌우로 조향 · 코너에서 드리프트를 누르고 놓아 가속'
+      : '↑ 가속 · ↓ 브레이크 · ← → 조향\nShift + 조향으로 드리프트 · 놓으면 미니터보';
+    $('best').hidden = best<=0;
+    $('best').textContent = '최고 기록 ' + formatTime(best);
+    $('start').textContent = onTitle?'경주 시작':mode==='paused'?'경주 재개':'다시 달리기';
+  }
+  report();
+  resize();
+}
+function setTouch(value) {
+  if (touch!==value) clearInput();
+  touch=!!value;
+  setOverlay();
+}
+
+function ensureAudio() {
+  if (muted) return;
+  try {
+    if (!audio) {
+      audio = new AudioContext();
+      engine = audio.createOscillator();
+      engineGain = audio.createGain();
+      engine.type='triangle';
+      engineGain.gain.value=0;
+      engine.connect(engineGain).connect(audio.destination);
+      engine.start();
+    }
+    audio.resume().catch(()=>{});
+  } catch {}
+}
+function tone(hz,seconds=.13) {
+  if (muted || !audio) return;
+  const voice=audio.createOscillator(), gain=audio.createGain(), now=audio.currentTime;
+  voice.type='square';
+  voice.frequency.value=hz;
+  gain.gain.setValueAtTime(.032,now);
+  gain.gain.exponentialRampToValueAtTime(.0001,now+seconds);
+  voice.connect(gain).connect(audio.destination);
+  voice.start();
+  voice.stop(now+seconds);
+}
+function updateEngine() {
+  if (!audio||!engineGain) return;
+  const now=audio.currentTime;
+  engine.frequency.setTargetAtTime(50+race.player.speed*.10,now,.06);
+  engineGain.gain.setTargetAtTime(mode==='playing'&&active&&!muted ? .009+race.player.speed*.00001 : 0,now,.045);
+}
+function formatTime(seconds) {
+  const centis=Math.floor(seconds*100);
+  const pad=value=>String(value).padStart(2,'0');
+  return pad(Math.floor(centis/6000))+':'+pad(Math.floor(centis/100)%60)+'.'+pad(centis%100);
+}
+function startOrResume() {
+  if (mode !== 'paused') race=createRace();
+  clearInput();
+  ensureAudio();
+  mode='countdown';
+  deadline=performance.now()+COUNTDOWN*1000;
+  $('countdown').textContent=String(COUNTDOWN);
+  lastSignal='';
+  goUntil=0;
+  accumulator=0;
+  setOverlay();
+  canvas.focus({preventScroll:true});
+}
+function pause() {
+  clearInput();
+  if (!['playing','countdown'].includes(mode)) return;
+  mode='paused';
+  goUntil=0;
+  setOverlay();
+  updateEngine();
+  if (active) $('start').focus({preventScroll:true});
+}
+function toggle() {
+  if (mode==='playing'||mode==='countdown') pause();
+  else startOrResume();
+}
+function finish() {
+  mode='finished';
+  clearInput();
+  if (!best || race.player.finished<best) {
+    best=race.player.finished;
+    try {localStorage.setItem('tidelineBestTime',String(best));} catch {}
+  }
+  setOverlay();
+  $('start').focus({preventScroll:true});
+  tone(850,.25);
+}
+
+for (const button of controls) {
+  button.addEventListener('pointerdown',event=>{
+    if (event.button!==0 || !['playing','countdown'].includes(mode) || [...pointers.values()].includes(button)) return;
+    event.preventDefault();
+    pointers.set(event.pointerId,button);
+    button.dataset.held='true';
+    button.setPointerCapture(event.pointerId);
+    ensureAudio();
+  });
+  for (const type of ['pointerup','pointercancel','lostpointercapture']) {
+    button.addEventListener(type,event=>{
+      if (pointers.get(event.pointerId)!==button) return;
+      pointers.delete(event.pointerId);
+      button.dataset.held='false';
+      if(type!=='pointerup' && button.dataset.drive==='drift') cancelDrift(race.player);
+    });
+  }
+}
+document.addEventListener('keydown',event=>{
+  if (event.ctrlKey||event.metaKey||event.altKey) return;
+  if (keyMap.has(event.code)) {
+    event.preventDefault();
+    if (mode==='playing'||mode==='countdown') keys.add(event.code);
+  }
+  if (!event.repeat && ['KeyP','Escape'].includes(event.code)) {
+    event.preventDefault();
+    if (mode==='paused'||mode==='playing'||mode==='countdown') toggle();
+  }
+});
+document.addEventListener('keyup',event=>keys.delete(event.code));
+window.addEventListener('blur',()=>{
+  clearInput();
+  if (!embedded || !parent.document.hasFocus()) pause();
+});
+document.addEventListener('visibilitychange',()=>{
+  if (document.hidden) pause();
+});
+matchMedia('(orientation: portrait)').addEventListener?.('change',clearInput);
+$('start').onclick=startOrResume;
+$('pause').onclick=pause;
+$('back').onclick=()=>{
+  pause();
+  if (embedded) parent.postMessage({type:'void-exit'},location.origin);
+  else location.href='../';
+};
+window.addEventListener('message',event=>{
+  if (!embedded || event.origin!==location.origin || event.source!==parent) return;
+  const data=event.data;
+  if (data?.type==='arcade-preferences') {
+    if (typeof data.active==='boolean') active=data.active;
+    muted=!!data.muted;
+    if (!active) pause();
+    if (typeof data.touch==='boolean' && data.touch!==touch) setTouch(data.touch);
+    report();
+    updateEngine();
+  }
+  if (data?.type==='void-cover') {active=false;pause();updateEngine();}
+  if (data?.type==='void-pause') pause();
+  if (data?.type==='void-toggle-pause') toggle();
+  if (data?.type==='void-pause-shortcut' && ['playing','paused','countdown'].includes(mode)) toggle();
+});
+
+function updateHUD() {
+  const place=race.finishPlace??order(race.racers).indexOf(race.player)+1;
+  for (const [id,value] of [
+    ['place',place+' / '+race.racers.length],['lap',race.lastLap+' / '+LAPS],
+    ['time',formatTime(race.player.finished??race.time)],['speed',String(Math.round(race.player.speed/TOP_SPEED*108))],
+  ]) if ($(id).textContent!==value) $(id).textContent=value;
+  const {boost,turbo,driftSide,driftCharge}=race.player;
+  $('boost').hidden=boost<=0&&turbo<=0;
+  const boostLabel=boost>0?'BOOST':'미니터보';
+  if($('boost').textContent!==boostLabel) $('boost').textContent=boostLabel;
+  const tier=driftCharge>=DRIFT_SECOND?2:driftCharge>=DRIFT_FIRST?1:0;
+  const driftLabel=tier===2?'강한 미니터보':tier===1?'미니터보 준비':'드리프트';
+  $('driftStatus').hidden=!driftSide;
+  $('driftStatus').dataset.tier=String(tier);
+  if($('driftLabel').textContent!==driftLabel) $('driftLabel').textContent=driftLabel;
+  $('driftFill').style.width=Math.min(1,driftCharge/DRIFT_SECOND)*100+'%';
+}
+
+const fixedStep=1/120;
+let paintedRace, paintedTime=-1, paintedWidth=0, paintedHeight=0;
+function frame(now) {
+  requestAnimationFrame(frame);
+  let elapsed=Math.min(.075,(now-previous)/1000);
+  previous=now;
+  if (!active || document.hidden) return;
+  if (mode==='countdown') {
+    const signal=String(Math.max(1,Math.ceil((deadline-now)/1000)));
+    if (now>=deadline) {
+      elapsed=Math.min(elapsed,(now-deadline)/1000);
+      mode='playing';
+      goUntil=now+600;
+      setOverlay();
+      tone(730,.18);
+    } else if (lastSignal!==signal) {
+      lastSignal=signal;
+      $('countdown').textContent=signal;
+      tone(420);
+    }
+  }
+  if (mode==='playing') {
+    accumulator+=elapsed;
+    const input=readInput();
+    const lap=race.lastLap;
+    const boost=race.player.boost, turbo=race.player.turbo;
+    const charge=race.player.driftCharge;
+    while (accumulator>=fixedStep && race.player.finished===null) {
+      stepRace(race,fixedStep,input);
+      accumulator-=fixedStep;
+    }
+    if (race.lastLap!==lap) tone(640,.22);
+    if ((race.player.boost>0 && boost===0) || (race.player.turbo>0 && turbo===0)) tone(360,.20);
+    if (charge<DRIFT_FIRST && race.player.driftCharge>=DRIFT_FIRST) tone(520,.08);
+    if (charge<DRIFT_SECOND && race.player.driftCharge>=DRIFT_SECOND) tone(690,.10);
+    if (race.player.finished!==null) finish();
+  }
+  if (mode==='playing') {
+    const starting=now<goUntil;
+    $('countdown').hidden=!starting;
+    if (starting) $('countdown').textContent='GO!';
+  }
+  updateHUD();
+  updateEngine();
+  if (paintedRace!==race || paintedTime!==race.time || paintedWidth!==canvas.width || paintedHeight!==canvas.height) {
+    drawRace(context,race,race.time);
+    paintedRace=race;
+    paintedTime=race.time;
+    paintedWidth=canvas.width;
+    paintedHeight=canvas.height;
+  }
+}
+resize();
+setOverlay();
+drawRace(context,race,0);
+requestAnimationFrame(frame);

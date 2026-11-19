@@ -42,7 +42,7 @@ const neonKnob = neonPad.querySelector("i");
 let neonPointer = null, neonTouchX = 0, neonTouchY = 0;
 let embeddedActive = false;
 let embeddedGame=1;
-function embeddedFrame(){return document.getElementById(embeddedGame===2?"cursedFrame":"fpsFrame");}
+function embeddedFrame(){return document.getElementById(menuGames[embeddedGame].embed.frame);}
 const menuMusic = new Audio("assets/menu-chip.wav");menuMusic.loop=true;menuMusic.volume=.35;
 function syncMenuMusic(){if(!isMuted&&!document.getElementById("arcadeMenu").hidden&&!document.hidden)menuMusic.play().catch(()=>{});else menuMusic.pause();}
 const joystick = document.querySelector(".joystick");
@@ -1010,10 +1010,15 @@ for (const [image, path] of [
 // 오락기 메뉴: 방향키로 선택하고 START / Enter로 실행합니다.
 let selectedMenuGame = 0;
 const menuGames = [
-  {id:"selectNeon", title:"NEON SURVIVOR", description:"드론을 피해 코어를 모으세요", ready:true},
-  {id:"selectVoid", title:"VOID BREACH", description:"3개 구역 · 탐험·전투·보스전", ready:true},
-  {id:"selectCursed", title:"CURSED EDGE", description:"저주를 받아치는 검 · 패링 액션", ready:true}
+  {id:"selectNeon", title:"NEON SURVIVOR", description:"드론을 피해 코어를 모으세요", genre:"SURVIVAL · 1 PLAYER", ready:true},
+  {id:"selectVoid", title:"VOID BREACH", description:"3개 구역 · 탐험·전투·보스전", genre:"3D FPS · 1 PLAYER", ready:true,
+    embed:{frame:"fpsFrame", console:"fpsConsole", src:"fps/index.html?v=20261119-mobile", preview:"fps-preview"}},
+  {id:"selectCursed", title:"CURSED EDGE", description:"저주를 받아치는 검 · 패링 액션", genre:"PARRY ACTION · 1 PLAYER", ready:true,
+    embed:{frame:"cursedFrame", console:"cursedConsole", src:"cursed/index.html?v=20261119-mobile", preview:"cursed-preview"}},
+  {id:"selectKart", title:"TIDELINE GP", description:"인디 힐 서킷에서 다섯 카트를 추월하세요", genre:"KART RACING · 2 LAPS", ready:true,
+    embed:{frame:"kartFrame", console:"kartConsole", src:"kart/index.html?v=3", preview:"kart-preview"}}
 ];
+const embeddedGames = menuGames.filter(game => game.embed);
 function selectMenuGame(step) {
   syncMenuMusic();
   selectedMenuGame = (selectedMenuGame + step + menuGames.length) % menuGames.length;
@@ -1028,10 +1033,9 @@ function selectMenuGame(step) {
   const preview = document.getElementById("menuPreview");
   preview.querySelector("span").textContent = game.title;
   preview.classList.toggle("pending", !game.ready);
-  preview.classList.toggle("fps-preview", selectedMenuGame === 1);
-  preview.classList.toggle("cursed-preview", selectedMenuGame === 2);
+  for (const {embed} of embeddedGames) preview.classList.toggle(embed.preview, game.embed === embed);
   document.getElementById("menuDescription").textContent = game.description;
-  document.getElementById("menuAvailability").textContent = game.ready ? (selectedMenuGame === 1 ? "3D FPS · 1 PLAYER" : selectedMenuGame===2 ? "PARRY ACTION · 1 PLAYER" : "SURVIVAL · 1 PLAYER") : "COMING SOON";
+  document.getElementById("menuAvailability").textContent = game.ready ? game.genre : "COMING SOON";
   document.getElementById("menuStatus").textContent = "↑ ↓ SELECT　 ENTER START";
 }
 function launchMenuGame() {
@@ -1042,10 +1046,10 @@ function launchMenuGame() {
     pauseGame(); stopBackgroundMusic(); releaseKeys(); embeddedActive = true; applyTouchLayout();
     document.getElementById("arcadeMenu").hidden = true;
     document.getElementById("gameConsole").hidden = true;
-    document.getElementById("fpsConsole").hidden = selectedMenuGame!==1;
-    document.getElementById("cursedConsole").hidden = selectedMenuGame!==2;
+    const chosen = menuGames[embeddedGame];
+    for (const {embed} of embeddedGames) document.getElementById(embed.console).hidden = embed !== chosen.embed;
     const frame = embeddedFrame();
-    if (!frame.getAttribute("src")) frame.src = selectedMenuGame===2 ? "cursed/index.html?v=20261119-mobile" : "fps/index.html?v=20261119-mobile";
+    if (!frame.hasAttribute("src")) frame.src = chosen.embed.src;
     else syncEmbeddedPreferences();
     document.getElementById("menuButton").disabled = false;
     document.getElementById("pauseButton").disabled = false;
@@ -1085,7 +1089,7 @@ document.getElementById("pauseButton").addEventListener("click", function () {
 });
 document.getElementById("menuButton").addEventListener("click", function () {
   document.body.classList.remove("touch-play", "fps-playing");
-  if (embeddedActive) { embeddedFrame().contentWindow.postMessage({type:"void-cover"},location.origin); embeddedActive = false; document.getElementById("fpsConsole").hidden = true; document.getElementById("cursedConsole").hidden=true; }
+  if (embeddedActive) { embeddedFrame().contentWindow.postMessage({type:"void-cover"},location.origin); embeddedActive = false; embeddedFrame().closest(".game-crt").hidden = true; }
   pauseGame(); showNicknameForm(false);
   document.getElementById("arcadeMenu").hidden = false;
   document.getElementById("gameConsole").hidden = true;
@@ -1159,11 +1163,19 @@ function applyTouchLayout(launching=false){
   document.getElementById('touchMode').setAttribute('aria-pressed',String(touchPreference));
   syncEmbeddedPreferences();
 }
-function syncEmbeddedPreferences(){for(const id of ['fpsFrame','cursedFrame']){const frame=document.getElementById(id);if(frame.getAttribute('src'))frame.contentWindow.postMessage({type:'arcade-preferences',muted:isMuted,touch:touchPreference,active:embeddedActive&&frame===embeddedFrame()},location.origin);}}
+function syncEmbeddedPreferences() {
+  for (const {embed} of embeddedGames) {
+    const frame = document.getElementById(embed.frame);
+    if (frame.hasAttribute('src')) frame.contentWindow.postMessage({
+      type:'arcade-preferences', muted:isMuted, touch:touchPreference,
+      active:embeddedActive && frame===embeddedFrame()
+    },location.origin);
+  }
+}
 document.getElementById('menuSound').onclick=()=>applyAudioMute(!isMuted);
 document.getElementById('touchMode').onclick=()=>{resetNeonPad();touchPreference=!touchPreference;applyTouchLayout();};
 document.getElementById('menuLaunch').onclick=launchMenuGame;
-for(const id of ['fpsFrame','cursedFrame'])document.getElementById(id).addEventListener('load',syncEmbeddedPreferences);
+for(const {embed} of embeddedGames) document.getElementById(embed.frame).addEventListener('load',syncEmbeddedPreferences);
 window.addEventListener('message',e=>{
   if(e.origin!==location.origin||e.source!==embeddedFrame().contentWindow)return;
   if(e.data?.type==='void-audio'&&embeddedActive)applyAudioMute(e.data.muted);

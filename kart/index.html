@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>TIDELINE GP · 인디 힐 서킷</title>
+  <link rel="stylesheet" href="race.css?v=3">
+</head>
+<body>
+  <main class="cab" aria-label="타이드라인 그랑프리">
+    <section class="view" aria-label="레이싱 화면">
+      <canvas id="road" tabindex="0" aria-label="인디 힐 서킷 경주로">Canvas를 지원하는 브라우저에서 사용할 수 있습니다.</canvas>
+      <div class="top">
+        <dl class="instruments">
+          <div><dt>순위</dt><dd id="place">5 / 6</dd></div>
+          <div><dt>바퀴</dt><dd id="lap">1 / 2</dd></div>
+          <div><dt>시간</dt><dd id="time">00:00.00</dd></div>
+        </dl>
+        <button type="button" id="pause">일시정지</button>
+      </div>
+      <div class="speed" aria-hidden="true"><span id="boost" hidden>BOOST</span><strong id="speed">0</strong> km/h</div>
+      <div class="drift-status" id="driftStatus" hidden data-tier="0"><span id="driftLabel">드리프트</span><div class="drift-meter" aria-hidden="true"><i id="driftFill"></i></div></div>
+      <div id="countdown" hidden aria-live="polite"></div>
+      <section class="overlay" id="overlay" aria-labelledby="title">
+        <div class="panel">
+          <h1 id="title">TIDELINE <span>GP</span></h1>
+          <p id="course">인디 힐 서킷 · 6대 · 2바퀴</p>
+          <p id="help">↑ 가속 · ↓ 브레이크 · ← → 조향 · Shift 드리프트</p>
+          <p id="best" hidden></p>
+          <button type="button" class="primary" id="start">경주 시작</button>
+          <button type="button" id="back">게임 선택</button>
+        </div>
+      </section>
+    </section>
+    <div class="touch-bar" id="touchControls" hidden aria-label="터치 주행 조작">
+      <div class="steer">
+        <button type="button" data-drive="left" aria-label="왼쪽으로 조향">←</button>
+        <button type="button" data-drive="right" aria-label="오른쪽으로 조향">→</button>
+      </div>
+      <div class="pedals">
+        <button type="button" data-drive="brake">브레이크</button>
+        <button type="button" data-drive="drift">드리프트</button>
+      </div>
+    </div>
+  </main>
+  <script type="module" src="race.js?v=3"></script>
+</body>
+</html>
