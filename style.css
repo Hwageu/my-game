@@ -108,31 +108,77 @@ body{color:var(--crt-text);color-scheme:dark}
   .preview-picture{height:150px}.preview-picture:not(.pending) span{font-size:11px}.game-preview p{font-size:12px;min-height:54px}.game-preview small{font-size:10px}.screen-score,.screen-credit{font-size:9px}.menu-status{font-size:11px}.menu-launch{font-size:13px;margin-top:16px}
   .game-controls{gap:6px}.game-controls button{flex:1 1 auto;font-size:12px;padding:9px}.game-controls>span{width:100%;margin:0;text-align:center;line-height:1.8}.control-deck{padding-inline:18px}.platform-note{font-size:11px;padding:14px 0}
 }
-/* Mobile play gets a dedicated screen and a separate thumb area in portrait. */
+/* Keep the cabinet toolbar below the playable area. */
 .touch-play .arcade-menu{height:100dvh;max-height:100dvh;width:100%;box-shadow:none}
-.touch-play .game-controls{padding:8px max(8px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left));gap:6px}
-.touch-play .game-controls button{min-height:44px;min-width:44px;font-size:12px}
-.neon-touch-actions button{min-height:48px;min-width:76px;font-size:14px}
-@media(orientation:portrait){
-  .touch-play:not(.fps-playing) #gameConsole{display:grid;grid-template-rows:minmax(0,1fr) clamp(180px,29dvh,250px)}
-  .touch-play:not(.fps-playing) #game{grid-row:1;min-height:0;align-self:center}
-  .touch-play:not(.fps-playing) .neon-touch{position:relative;grid-row:2;inset:auto;border-top:1px solid #34434a;background:#0a151d}
-  .touch-play:not(.fps-playing) #neonPad{left:max(24px,env(safe-area-inset-left));bottom:32px;width:120px;height:120px}
-  .touch-play:not(.fps-playing) .neon-touch-actions{right:max(22px,env(safe-area-inset-right));bottom:38px}
+.touch-play .cabinet-screen{padding-top:env(safe-area-inset-top)}
+.touch-play .game-controls{
+  flex-wrap:nowrap;
+  gap:4px;
+  padding:4px max(6px,env(safe-area-inset-right)) max(4px,env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left));
 }
-@media(orientation:landscape) and (max-height:550px){.touch-play .game-controls{padding-block:3px}.touch-play .game-controls button{min-height:36px;font-size:11px}.touch-play #neonPad{bottom:18px;width:94px;height:94px}.touch-play .neon-touch-actions{bottom:18px}}
+.touch-play .game-controls button{flex:0 1 auto;min-width:44px;min-height:44px;padding:4px 6px;font-size:11px;line-height:1.25;touch-action:manipulation}
+.neon-status{display:none}
+.neon-touch-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:min(164px,100%)}
+.neon-touch-actions button{min-width:0;min-height:46px;font-size:12px;padding:5px}
+.neon-touch-actions button:disabled{opacity:.45}
+@media(orientation:portrait){
+  .touch-play:not(.fps-playing) #gameConsole{display:grid;grid-template-rows:minmax(0,1fr) auto auto}
+  .touch-play:not(.fps-playing) #game{grid-row:1;min-height:0;align-self:center}
+  .touch-play .neon-status{
+    display:block;
+    grid-row:2;
+    margin:0;
+    padding:8px;
+    text-align:center;
+    font-size:13px;
+    font-variant-numeric:tabular-nums;
+    color:#d5e5d6;
+    background:#0a151d;
+  }
+  .touch-play .neon-touch{
+    display:flex;
+    position:relative;
+    grid-row:3;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    inset:auto;
+    padding:12px max(16px,env(safe-area-inset-right)) 14px max(16px,env(safe-area-inset-left));
+    border-top:1px solid #34434a;
+    background:#0a151d;
+  }
+  .touch-play #neonPad,.touch-play .neon-touch-actions{position:static}
+  .touch-play #neonPad{flex:0 0 auto;width:clamp(92px,30vw,116px);height:clamp(92px,30vw,116px)}
+  .touch-play .neon-touch-actions{width:min(164px,52%)}
+}
+@media(orientation:landscape) and (max-height:550px){
+  .touch-play:not(.fps-playing) #gameConsole{
+    --neon-columns:minmax(100px,1fr) minmax(0,5fr) minmax(130px,1fr);
+    display:grid;
+    grid-template-columns:var(--neon-columns);
+    grid-template-rows:minmax(0,1fr);
+    padding-inline:env(safe-area-inset-left) env(safe-area-inset-right);
+  }
+  .touch-play:not(.fps-playing) #game{grid-area:1/2;min-height:0;background:#050a10}
+  .touch-play .neon-touch{
+    display:grid;
+    grid-template-columns:var(--neon-columns);
+    align-items:end;
+    justify-items:center;
+    padding:0 env(safe-area-inset-right) 14px env(safe-area-inset-left);
+  }
+  .touch-play #neonPad{position:static;grid-column:1;width:88px;height:88px}
+  .touch-play .neon-touch-actions{position:static;grid-column:3;width:calc(100% - 12px)}
+}
+@media(max-width:350px){
+  .touch-play .game-controls button{padding-inline:4px}
+}
 @media(prefers-reduced-motion:reduce){.coin-flash i{animation:none;background:#ffd889}.menu-launch:active{transform:none}}
 
 /* Functional labels remain readable; tiny cabinet lettering is decorative. */
 .game-preview small,.screen-score,.screen-credit,.game-option>span,.game-option small,.player-label,.start-control>span{font-size:11px}
 .action-buttons i{color:#111}.action-buttons i:first-child{color:#fff}
 @media(max-width:600px){.game-preview small,.screen-score,.screen-credit,.game-option>span,.game-option small,.player-label,.start-control>span{font-size:11px}.start-control>span{letter-spacing:0}}
-
-.neon-status{display:none}.neon-touch-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;width:164px}.neon-touch-actions button{min-width:0;min-height:48px;font-size:13px;padding:6px}.neon-touch-actions button:disabled{opacity:.45}
-@media(orientation:portrait){.touch-play:not(.fps-playing) #gameConsole{grid-template-rows:minmax(0,1fr) auto clamp(180px,29dvh,250px)}.touch-play:not(.fps-playing) .neon-status{display:block;grid-row:2;margin:0;padding:12px 8px;text-align:center;font-size:14px;font-variant-numeric:tabular-nums;color:#d5e5d6;background:#0a151d}.touch-play:not(.fps-playing) .neon-touch{grid-row:3}.touch-play:not(.fps-playing) .neon-touch-actions{bottom:38px}}
-@media(max-width:350px){.neon-touch-actions{width:140px}.touch-play:not(.fps-playing) #neonPad{left:16px;width:104px;height:104px}.touch-play:not(.fps-playing) .neon-touch-actions{right:14px}.neon-touch-actions button{font-size:12px}}
-
-@media(orientation:portrait){.touch-play:not(.fps-playing) .neon-touch{align-self:stretch}}
 
 .game-controls>span,.start-control button,.coin-door>span,.coin-door b,.cabinet-badge b{font-size:11px}.player-label,.start-control>span{color:#fff9ed}.action-buttons i{color:#000}.action-buttons i:first-child{color:#fff}
 

@@ -22,11 +22,11 @@ function sound(type){if(muted)return;try{audio ||= new AudioContext();audio.resu
   if(['perfect','parry','slash'].includes(type)){const len=Math.floor(audio.sampleRate*.08),buffer=audio.createBuffer(1,len,audio.sampleRate),data=buffer.getChannelData(0);for(let i=0;i<len;i++)data[i]=(Math.random()*2-1)*Math.pow(1-i/len,4)*.22;const source=audio.createBufferSource();source.buffer=buffer;source.connect(audio.destination);source.start();duck=.16;music.volume=.1;}
 }catch{}}
 function setMuted(value,report=true){muted=Boolean(value);try{localStorage.setItem('neonArcadeMuted',String(muted));}catch{}$('mute').textContent=muted?'소리 OFF':'소리 ON';$('mute').setAttribute('aria-pressed',String(muted));syncAudio();if(report&&parent!==window)parent.postMessage({type:'void-audio',muted},location.origin);}
-function setTouch(value){const changed=touch!==Boolean(value);touch=Boolean(value);document.body.classList.toggle('touch-mode',touch);$('help').querySelector('p').innerHTML='끌어서 방향 조준 · 손을 떼면 패링<br>PC는 마우스로 조준하고 클릭하세요.';if(changed)resetInput();}
+function setTouch(value){const changed=touch!==Boolean(value);touch=Boolean(value);document.body.classList.toggle('touch-mode',touch);$('gestureTip').textContent=touch?'밀어서 조준 · 손 떼면 패링':'조준한 방향으로 패링 · 검 베기는 자동';$('help').querySelector('p').innerHTML=touch?'밀어서 방향 조준 · 손을 떼면 패링<br>가볍게 탭하면 같은 방향으로 패링':'마우스로 조준하고 클릭하면 패링';if(changed)resetInput();}
 function report(){if(parent!==window)parent.postMessage({type:'void-state',mode:game.mode==='stageclear'?'won':game.mode,stage:game.stage,lastStage:game.stage===2},location.origin);}
 function notify(text,perfect=false){$('notice').textContent=text;$('notice').classList.toggle('perfect',perfect);noticeTime=perfect?.65:1.8;}
-function input(){const x=Number(!!(keys.KeyD||keys.ArrowRight))-Number(!!(keys.KeyA||keys.ArrowLeft)),y=Number(!!(keys.KeyS||keys.ArrowDown))-Number(!!(keys.KeyW||keys.ArrowUp));if(x||y)aimAngle=Math.atan2(y,x);return{aimAngle,autoAttack:true};}
-function resetInput(){keys={};gesture=null;$('gesturePad').hidden=true;}
+function input(){const x=Number(!!(keys.KeyD||keys.ArrowRight))-Number(!!(keys.KeyA||keys.ArrowLeft)),y=Number(!!(keys.KeyS||keys.ArrowDown))-Number(!!(keys.KeyW||keys.ArrowUp));if(!gesture&&(x||y))aimAngle=Math.atan2(y,x);return{aimAngle,autoAttack:true};}
+function resetInput(){keys={};resetGesture();}
 
 function start(){game=new Game(dimensions.w,dimensions.h);fx=[];aimAngle=-Math.PI/2;game.start();lastMode='';resetInput();try{audio ||= new AudioContext();audio.resume();}catch{}canvas.focus();syncAudio();}
 function pauseShortcut(){
@@ -55,7 +55,7 @@ function processEvents(){for(const e of game.events){sound(e.type);if(e.type==='
 function frame(now){requestAnimationFrame(frame);const elapsed=Math.max(0,(now-previous)/1000);previous=now;if(cabinetCovered||document.hidden)return;const dt=Math.min(elapsed,.05);const controls=input();game.player.moving=false;game.update(elapsed,controls);processEvents();updateOverlay();
   const paused=['paused','upgrade','dead','won'].includes(game.mode);if(!paused){for(const f of fx){f.life-=dt;if(!f.ring){f.x+=f.vx*dt;f.y+=f.vy*dt;f.vy+=dt*130;}}fx=fx.filter(f=>f.life>0);noticeTime-=dt;if(noticeTime<=0)$('notice').textContent='';duck=Math.max(0,duck-dt);music.volume+=((duck>0?.1:.22)-music.volume)*(1-Math.exp(-dt*8));}
   ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,canvas.width,canvas.height);ctx.save();ctx.setTransform(dimensions.scale,0,0,dimensions.scale,dimensions.left,dimensions.top);if(shake>0&&!paused){ctx.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake);shake=Math.max(0,shake-dt*35);}drawScene(ctx,game,game.time,fx);ctx.restore();
-  $('gestureTip').hidden=game.mode!=='playing';
+  $('gestureTip').hidden=game.mode!=='playing'||game.time>8;
   const p=game.player;$('stage').textContent=STAGES[game.stage].name;$('wave').textContent='WAVE '+(game.wave+1)+' / 3 · 남은 적 '+game.enemies.filter(e=>e.hp>0).length;$('hp').textContent=p.hp+' / '+p.maxHp;$('score').textContent=String(game.score).padStart(6,'0');$('combo').textContent='PARRY × '+game.combo;$('timer').textContent=Math.floor(game.time/60)+':'+String(Math.floor(game.time%60)).padStart(2,'0');
   if($('hearts').children.length!==p.maxHp)$('hearts').innerHTML='<i></i>'.repeat(p.maxHp);[...$('hearts').children].forEach((el,i)=>el.classList.toggle('empty',i>=p.hp));$('parryStatus').textContent=p.parryCooldown>0?'패링 대기':'패링 준비';$('parryFill').style.width=(1-p.parryCooldown/.52)*100+'%';$('dashStatus').textContent='검 베기 · 자동';
   const king=game.enemies.find(e=>e.type==='king'&&e.hp>0);$('boss').hidden=!king;if(king)$('bossFill').style.width=king.hp/king.maxHp*100+'%';$('impact').style.opacity=String(game.hurtFlash*1.8);$('countdown').hidden=game.mode!=='countdown';if(game.mode==='countdown')$('countdown').textContent=String(Math.max(1,Math.ceil(game.countdown)));if(game.mode==='stageclear')$('description').textContent='다음 구역으로 · '+Math.max(1,Math.ceil(game.countdown));
@@ -63,11 +63,55 @@ function frame(now){requestAnimationFrame(frame);const elapsed=Math.max(0,(now-p
 
 document.addEventListener('keydown',e=>{if(e.ctrlKey||e.metaKey||e.altKey)return;if(e.target?.tagName==='BUTTON'&&['Space','Enter'].includes(e.code))return;if(e.code==='Tab'&&!$('overlay').hidden){const buttons=[...$('overlay').querySelectorAll('button')].filter(b=>!b.hidden&&!b.disabled&&b.getClientRects().length);const first=buttons[0],last=buttons.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}return;}if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();keys[e.code]=true;if(e.repeat)return;if(e.code==='KeyM')setMuted(!muted);if(['Escape','KeyP'].includes(e.code)){pauseShortcut();return;}if(game.mode==='title'&&e.code==='Enter'){start();return;}if(game.mode==='upgrade'&&['Digit1','Digit2','Digit3'].includes(e.code)){const key=game.choices[Number(e.code.at(-1))-1];if(key)choose(key);return;}if(['Space','KeyF','KeyK'].includes(e.code))game.parry();});document.addEventListener('keyup',e=>keys[e.code]=false);
 function pointAim(e){const r=canvas.getBoundingClientRect();aimAngle=Math.atan2((e.clientY-r.top-dimensions.top)/dimensions.scale-game.player.y,(e.clientX-r.left-dimensions.left)/dimensions.scale-game.player.x);game.player.angle=aimAngle;}
-function moveGesture(e){if(e.pointerType!=='touch'){if(game.mode==='playing')pointAim(e);return;}if(!gesture||e.pointerId!==gesture.id)return;let x=(e.clientX-gesture.x)/56,y=(e.clientY-gesture.y)/56,l=Math.max(1,Math.hypot(x,y));x/=l;y/=l;if(Math.hypot(x,y)>.12){aimAngle=Math.atan2(y,x);game.player.angle=aimAngle;}$('gesturePad').querySelector('i').style.transform='translate('+x*25+'px,'+y*25+'px)';}
-canvas.addEventListener('pointerdown',e=>{if(game.mode!=='playing'||gesture)return;e.preventDefault();canvas.focus();syncAudio();try{audio ||= new AudioContext();audio.resume();}catch{}if(e.pointerType!=='touch')pointAim(e);if(e.button===2){game.parry();return;}gesture={id:e.pointerId,x:e.clientX,y:e.clientY};canvas.setPointerCapture(e.pointerId);$('gesturePad').hidden=e.pointerType!=='touch';$('gesturePad').style.left=e.clientX+'px';$('gesturePad').style.top=e.clientY+'px';$('gesturePad').querySelector('i').style.transform='translate(0,0)';});
-canvas.addEventListener('pointermove',moveGesture);
-canvas.addEventListener('pointerup',e=>{if(!gesture||e.pointerId!==gesture.id)return;gesture=null;$('gesturePad').hidden=true;game.parry();});
-for(const type of ['pointercancel','lostpointercapture'])canvas.addEventListener(type,e=>{if(gesture&&e.pointerId===gesture.id){gesture=null;$('gesturePad').hidden=true;}});
+function resetGesture(){
+  const id=gesture?.id;
+  gesture=null;
+  $('gesturePad').hidden=true;
+  if(id!==undefined&&canvas.hasPointerCapture(id))canvas.releasePointerCapture(id);
+}
+function aimGesture(event){
+  const x=event.clientX-gesture.x,y=event.clientY-gesture.y;
+  const distance=Math.hypot(x,y);
+  if(distance>7){
+    aimAngle=Math.atan2(y,x);
+    game.player.angle=aimAngle;
+  }
+  const scale=22/Math.max(42,distance);
+  $('gesturePad').querySelector('i').style.transform='translate('+x*scale+'px,'+y*scale+'px)';
+}
+canvas.addEventListener('pointerdown',event=>{
+  if(game.mode!=='playing'||gesture||![0,2].includes(event.button))return;
+  event.preventDefault();
+  canvas.focus({preventScroll:true});
+  syncAudio();
+  try{audio ||= new AudioContext();audio.resume();}catch{}
+  if(event.pointerType!=='touch')pointAim(event);
+  if(event.button===2){game.parry();return;}
+  gesture={id:event.pointerId,x:event.clientX,y:event.clientY};
+  canvas.setPointerCapture(event.pointerId);
+  if(event.pointerType==='touch'){
+    const pad=$('gesturePad');
+    pad.style.setProperty('--aim-x',event.clientX+'px');
+    pad.style.setProperty('--aim-y',event.clientY+'px');
+    pad.querySelector('i').style.transform='';
+    pad.hidden=false;
+  }
+});
+canvas.addEventListener('pointermove',event=>{
+  if(game.mode!=='playing')return;
+  if(event.pointerId===gesture?.id&&event.pointerType==='touch')aimGesture(event);
+  if(event.pointerType!=='touch'&&(!gesture||event.pointerId===gesture.id))pointAim(event);
+});
+canvas.addEventListener('pointerup',event=>{
+  if(event.pointerId!==gesture?.id)return;
+  if(event.pointerType==='touch')aimGesture(event);
+  else pointAim(event);
+  resetGesture();
+  game.parry();
+});
+for(const type of ['pointercancel','lostpointercapture']){
+  canvas.addEventListener(type,event=>{if(event.pointerId===gesture?.id)resetGesture();});
+}
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 $('pause').onclick=togglePause;$('mute').onclick=()=>setMuted(!muted);$('start').onclick=togglePause;$('back').onclick=()=>{game.pause();syncAudio();if(parent!==window)parent.postMessage({type:'void-exit'},location.origin);else location.href='../';};$('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{notify('브라우저 전체화면을 사용할 수 없습니다.');}};
 function backgroundPause(){resetInput();game.pause();syncAudio();}window.addEventListener('blur',()=>{resetInput();if(parent===window||!parent.document.hasFocus())backgroundPause();});document.addEventListener('visibilitychange',()=>{if(document.hidden)backgroundPause();});window.addEventListener('resize',configureCanvas);

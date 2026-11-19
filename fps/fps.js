@@ -67,7 +67,7 @@ try{muted=localStorage.getItem('neonArcadeMuted')==='true';}catch{}
 function reportMode(){if(parent!==window)parent.postMessage({type:'void-state',mode:state.mode,stage:stageIndex,lastStage:stageIndex===Stages.STAGES.length-1},location.origin);}const keys={};camera.position.set(20,1.65,82);
 function tone(f,d=.1,kind='square',gain=.045){if(muted)return;try{audio ||= new AudioContext();audio.resume();const o=audio.createOscillator(),g=audio.createGain();o.type=kind;o.frequency.setValueAtTime(f,audio.currentTime);o.frequency.exponentialRampToValueAtTime(Math.max(25,f*.25),audio.currentTime+d);g.gain.setValueAtTime(gain,audio.currentTime);g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+d);o.connect(g).connect(audio.destination);o.start();o.stop(audio.currentTime+d);}catch{}}
 function notify(t){$('notice').textContent=t;noticeTime=3;}
-function clearKeys(){for(const k in keys)keys[k]=false;mouseDown=false;lookDrag=false;if(typeof resetPad==='function'){resetPad();lookId=null;}}
+function clearKeys(){for(const k in keys)keys[k]=false;mouseDown=false;lookDrag=false;resetPad();lookId=null;fireId=null;}
 function pause(){music.pause();if(state.mode==='playing'||state.mode==='countdown'){state.mode='paused';clearKeys();show('PAUSED','재개하면 3초 후 전투가 이어집니다.','재개');}}
 function pauseShortcut(){
   if(state.mode==='paused'){enter();return;}
@@ -79,7 +79,7 @@ function pauseShortcut(){
 function show(title,desc,button){$('overlay').hidden=false;$('overlay').querySelector('h1').textContent=title;$('description').textContent=desc;$('enter').textContent=button;document.body.classList.add('paused');$('dragMode').hidden=['won','dead'].includes(state.mode);$('enter').focus({preventScroll:true});reportMode();}
 async function enter(){if(document.body.classList.contains('touch-controls')&&['title','paused'].includes(state.mode)){startDragMode();return;}if(dragMode&&state.mode==='paused'){startDragMode();return;}if(state.mode==='won'){nextStage();return;}if(state.mode==='dead'){location.reload();return;}try{await renderer.domElement.requestPointerLock();}catch{startDragMode();}}
 // User gesture is required for pointer lock; never capture the pointer on page load.
-function startDragMode(){dragMode=true;clearKeys();renderer.domElement.focus();$('overlay').hidden=true;document.body.classList.remove('paused');if(state.mode==='paused'){state.mode='countdown';resumeDeadline=performance.now()+3000;}else if(state.mode==='title')state.mode='playing';syncMusic();reportMode();notify(document.body.classList.contains('touch-controls')?'왼쪽 이동 · 화면 드래그 조준 · FIRE 사격':'우클릭 드래그: 시점 · 좌클릭: 사격');}
+function startDragMode(){dragMode=true;clearKeys();renderer.domElement.focus();$('overlay').hidden=true;document.body.classList.remove('paused');if(state.mode==='paused'){state.mode='countdown';resumeDeadline=performance.now()+3000;}else if(state.mode==='title')state.mode='playing';syncMusic();reportMode();if(!document.body.classList.contains('touch-controls'))notify('우클릭 드래그: 시점 · 좌클릭: 사격');}
 $('dragMode').onclick=()=>{if(state.mode==='won')nextStage();else if(state.mode==='dead')location.reload();else startDragMode();};
 $('enter').onclick=enter;renderer.domElement.addEventListener('click',()=>{if(state.mode==='title'||state.mode==='paused')enter();});
 document.addEventListener('pointerlockchange',()=>{if(document.pointerLockElement===renderer.domElement){clearKeys();$('overlay').hidden=true;document.body.classList.remove('paused');if(state.mode==='paused'){state.mode='countdown';resumeDeadline=performance.now()+3000;renderer.domElement.focus();reportMode();}else if(state.mode==='title'){state.mode='playing';syncMusic();reportMode();tone(220,.2,'sine');}}else pause();});
@@ -176,9 +176,10 @@ function gunNoise(){if(muted)return;try{
 }catch{}}
 
 function movePlayer(dt,x,z){const len=Math.max(1,Math.hypot(x,z)),sprint=keys.ShiftLeft||keys.ShiftRight,speed=sprint?12:8.5,dashStep=Math.min(state.dash,dt);state.dashCooldown=Math.max(0,state.dashCooldown-dt);state.dash=Math.max(0,state.dash-dt);if(dashStep>0)move(camera.position,state.dashX*23*dashStep,state.dashZ*23*dashStep);const rest=dt-dashStep;if(rest>0)move(camera.position,(x*Math.cos(yaw)+z*Math.sin(yaw))/len*speed*rest,(-x*Math.sin(yaw)+z*Math.cos(yaw))/len*speed*rest);if(!reducedMotion){const fov=state.dash>0?96:sprint&&(x||z)?89:82;camera.fov=T.MathUtils.damp(camera.fov,fov,9,dt);camera.updateProjectionMatrix();}}
-function dash(){if(state.mode!=='playing'||state.dashCooldown>0)return;let x=Number(!!(keys.KeyD||keys.ArrowRight))-Number(!!(keys.KeyA||keys.ArrowLeft)),z=Number(!!(keys.KeyS||keys.ArrowDown))-Number(!!(keys.KeyW||keys.ArrowUp));if(!x&&!z)z=-1;const l=Math.hypot(x,z);state.dashX=(x*Math.cos(yaw)+z*Math.sin(yaw))/l;state.dashZ=(-x*Math.sin(yaw)+z*Math.cos(yaw))/l;state.dash=.18;state.dashCooldown=1.15;tone(180,.15,'sawtooth',.025);}
-function reload(){const i=state.weapon,w=specs[i];if(!state.reload&&state.rounds[i]<w.cap&&state.reserve[i]>0){state.reload=[1.2,1.8,1.4][i];notify('장전 중…');tone(120,.08);}}
-function shoot(){if(state.mode!=='playing'||state.cool>0||state.reload>0)return;const i=state.weapon,w=specs[i];if(!state.rounds[i]){reload();return;}state.rounds[i]--;state.shots++;let connected=false;muzzle=weaponArt.muzzles[i];weaponArt.models.forEach((m,n)=>m.visible=n===i);gunNoise();ejectCasing();pitch=Math.max(-1.35,pitch-[.022,.045,.013][i]);state.cool=w.delay;state.recoil=1;flashLight.intensity=7;muzzle.visible=true;tone(i===1?65:140,i===1?.18:.08,'sawtooth',.07);camera.updateMatrixWorld();scene.updateMatrixWorld(true);const targets=[...solids,...enemies.filter(e=>e.hp>0).map(e=>e.g)];for(let p=0;p<w.pellets;p++){ray.setFromCamera(new T.Vector2((Math.random()-.5)*w.spread,(Math.random()-.5)*w.spread),camera);const hit=ray.intersectObjects(targets,true)[0];playerTracer(hit?hit.point:ray.ray.at(55,new T.Vector3()));if(!hit)continue;const enemy=hit.object.userData.enemy;if(!enemy)impactMark(hit);particles(hit.point,enemy?0xff653e:0xc8c0a0);if(enemy&&enemy.hp>0){if(!connected){state.hits++;connected=true;}enemy.hp-=w.damage;enemy.flash=.16;hitTimer=.16;hitLabel='−'+w.damage;tone(310,.055,'triangle',.085);if(enemy.hp<=0){state.kills++;if(enemy.g.position.distanceTo(camera.position)<8){state.hp=Math.min(100,state.hp+8);notify('CLOSE KILL · 체력 +8');}if(state.kills%3===0)pickup(enemy.g.position.x,enemy.g.position.z,state.kills%6===0?'health':'ammo');hitTimer=.5;hitLabel='TARGET ELIMINATED';enemy.deadTime=.45;tone(80,.18,'triangle');}}}}
+function dash(){if(state.mode!=='playing'||state.dashCooldown>0)return;let [x,z]=movementInput();if(!x&&!z)z=-1;const l=Math.hypot(x,z);state.dashX=(x*Math.cos(yaw)+z*Math.sin(yaw))/l;state.dashZ=(-x*Math.sin(yaw)+z*Math.cos(yaw))/l;state.dash=.18;state.dashCooldown=1.15;tone(180,.15,'sawtooth',.025);}
+const reloadTimes=[1.2,1.8,1.4];
+function reload(){const i=state.weapon,w=specs[i];if(!state.reload&&state.rounds[i]<w.cap&&state.reserve[i]>0){state.reload=reloadTimes[i];notify('장전 중…');tone(120,.08);}}
+function shoot(){if(state.mode!=='playing'||state.cool>0||state.reload>0)return;const i=state.weapon,w=specs[i];if(!state.rounds[i]){reload();return;}state.rounds[i]--;state.shots++;let connected=false;muzzle=weaponArt.muzzles[i];weaponArt.models.forEach((m,n)=>m.visible=n===i);gunNoise();ejectCasing();camera.rotation.set(pitch,yaw,0);pitch=Math.max(-1.35,pitch-[.022,.045,.013][i]);state.cool=w.delay;state.recoil=1;flashLight.intensity=7;muzzle.visible=true;tone(i===1?65:140,i===1?.18:.08,'sawtooth',.07);camera.updateMatrixWorld();scene.updateMatrixWorld(true);const targets=[...solids,...enemies.filter(e=>e.hp>0).map(e=>e.g)];for(let p=0;p<w.pellets;p++){ray.setFromCamera(new T.Vector2((Math.random()-.5)*w.spread,(Math.random()-.5)*w.spread),camera);const hit=ray.intersectObjects(targets,true)[0];playerTracer(hit?hit.point:ray.ray.at(55,new T.Vector3()));if(!hit)continue;const enemy=hit.object.userData.enemy;if(!enemy)impactMark(hit);particles(hit.point,enemy?0xff653e:0xc8c0a0);if(enemy&&enemy.hp>0){if(!connected){state.hits++;connected=true;}enemy.hp-=w.damage;enemy.flash=.16;hitTimer=.16;hitLabel='−'+w.damage;tone(310,.055,'triangle',.085);if(enemy.hp<=0){state.kills++;if(enemy.g.position.distanceTo(camera.position)<8){state.hp=Math.min(100,state.hp+8);notify('CLOSE KILL · 체력 +8');}if(state.kills%3===0)pickup(enemy.g.position.x,enemy.g.position.z,state.kills%6===0?'health':'ammo');hitTimer=.5;hitLabel='TARGET ELIMINATED';enemy.deadTime=.45;tone(80,.18,'triangle');}}}}
 function interact(){const r=relays.find(r=>!r.on&&r.g.position.distanceTo(new T.Vector3(camera.position.x,0,camera.position.z))<3);if(r){r.on=true;r.screen.material=green;state.relays++;tone(520,.25,'sine');notify(stage.objective+' 가동 '+state.relays+' / 3');if(state.relays===3){if(!boss||boss.hp<=0){exit.material=green;notify('탈출구 개방 · 북동쪽 탈출구로 이동');}else notify('장치 가동 완료 · 중앙 수호기를 제압하세요');}}}
 function end(win){$('hp').textContent=state.hp;music.pause();state.mode=win?'won':'dead';clearKeys();document.exitPointerLock?.();const totalShots=(checkpoint.shots||0)+state.shots,totalHits=(checkpoint.hits||0)+state.hits;const accuracy=totalShots?Math.round(totalHits/totalShots*100):0;const totalTime=Math.floor((checkpoint.time||0)+state.time);const final=stageIndex===Stages.STAGES.length-1;
 if(win&&!final)state.transition=3;
@@ -186,7 +187,7 @@ show(win?(final?'EXTRACTED':'SECTOR CLEAR'):'SIGNAL LOST',(win?(final&&checkpoin
 
 function hurt(n){state.hp=Math.max(0,state.hp-n);state.hurt=.65;tone(65,.12);if(!state.hp)end(false);}
 let previous=performance.now();function frame(now){requestAnimationFrame(frame);const dt=Math.min((now-previous)/1000,.05);previous=now;if(cabinetCovered||document.hidden)return;if(state.mode==='won'){if(state.transition>0){state.transition-=dt;$('enter').textContent='다음 구역으로 · '+Math.max(1,Math.ceil(state.transition));if(state.transition<=0)nextStage();}return;}if(['paused','dead'].includes(state.mode))return;if(state.mode==='countdown'){const remaining=resumeDeadline-now;$('notice').textContent=String(Math.max(1,Math.ceil(remaining/1000)));if(remaining<=0){state.mode='playing';syncMusic();reportMode();notify('전투 재개');}}
-if(state.mode==='playing'){updateAudioMix(dt);state.time+=dt;Art.animateStage(stageArt,state.time,dt);state.cool=Math.max(0,state.cool-dt);state.hurt=Math.max(0,state.hurt-dt);state.recoil=Math.max(0,state.recoil-dt*9);if(state.reload>0){state.reload-=dt;if(state.reload<=0){const i=state.weapon,n=Math.min(specs[i].cap-state.rounds[i],state.reserve[i]);state.rounds[i]+=n;state.reserve[i]-=n;notify('장전 완료');tone(220,.06);}}let x=Number(!!(keys.KeyD||keys.ArrowRight))-Number(!!(keys.KeyA||keys.ArrowLeft)),z=Number(!!(keys.KeyS||keys.ArrowDown))-Number(!!(keys.KeyW||keys.ArrowUp));movePlayer(dt,x,z);camera.rotation.set(pitch,yaw,0);moveBlend=T.MathUtils.damp(moveBlend,x||z?1:0,8,dt);camera.position.y=1.65+(reducedMotion?0:Math.sin(state.time*12)*.025*moveBlend);stepTimer-=dt;if((x||z)&&stepTimer<=0){stepTimer=keys.ShiftLeft?.28:.42;tone(72+Math.random()*10,.055,'triangle',.015);}if(mouseDown)shoot();
+if(state.mode==='playing'){updateAudioMix(dt);state.time+=dt;Art.animateStage(stageArt,state.time,dt);state.cool=Math.max(0,state.cool-dt);state.hurt=Math.max(0,state.hurt-dt);state.recoil=Math.max(0,state.recoil-dt*9);if(state.reload>0){state.reload-=dt;if(state.reload<=0){state.reload=0;const i=state.weapon,n=Math.min(specs[i].cap-state.rounds[i],state.reserve[i]);state.rounds[i]+=n;state.reserve[i]-=n;notify('장전 완료');tone(220,.06);}}const [x,z]=movementInput();movePlayer(dt,x,z);camera.rotation.set(pitch,yaw,0);moveBlend=T.MathUtils.damp(moveBlend,x||z?1:0,8,dt);camera.position.y=1.65+(reducedMotion?0:Math.sin(state.time*12)*.025*moveBlend);stepTimer-=dt;if((x||z)&&stepTimer<=0){stepTimer=keys.ShiftLeft?.28:.42;tone(72+Math.random()*10,.055,'triangle',.015);}if(mouseDown||fireId!==null)shoot();
 updateEnemies(dt);
 if(state.mode!=='playing')return;
 updateEnemyProjectiles(dt);
@@ -195,7 +196,7 @@ updatePlayerTracers(dt);updateCasings(dt);
 state.hazardCooldown=Math.max(0,state.hazardCooldown-dt);for(const h of hazards)h.material.uniforms.uTime.value=state.time;
 if(state.hazardCooldown<=0&&stage.hazards.some(h=>camera.position.x>=h.x&&camera.position.x<=h.x+h.w&&camera.position.z>=h.z&&camera.position.z<=h.z+h.d)){state.hazardCooldown=.7;hurt(12);if(state.mode!=='playing')return;}
 for(const p of pickups){if(p.used||(p.type==='health'&&state.hp>=100))continue;p.g.rotation.y+=dt;p.g.position.y=.55+Math.sin(state.time*3)*.1;if(Math.hypot(p.g.position.x-camera.position.x,p.g.position.z-camera.position.z)<1.3){p.used=true;p.g.visible=false;if(p.type==='cache'){state.secrets++;state.hp=Math.min(100,state.hp+20);state.reserve=state.reserve.map((n,i)=>n+[24,12,36][i]);notify('숨겨진 보급고 발견 · 체력과 탄약 보급');}else if(p.type==='health'){state.hp=Math.min(100,state.hp+30);notify('의료 팩 +30');}else{state.reserve=state.reserve.map((n,i)=>n+[24,12,36][i]);notify('탄약 보급');}tone(600,.1,'sine');}}
-$('prompt').textContent=relays.some(r=>!r.on&&Math.hypot(r.g.position.x-camera.position.x,r.g.position.z-camera.position.z)<3)?'[E] '+stage.objective+' 작동':'';if(state.relays===3&&(!boss||boss.hp<=0)&&camera.position.distanceTo(new T.Vector3(108,1.65,13))<3)end(true);noticeTime-=dt;if(noticeTime<=0)$('notice').textContent='';}
+const canUse=relays.some(r=>!r.on&&Math.hypot(r.g.position.x-camera.position.x,r.g.position.z-camera.position.z)<3);$('prompt').textContent=canUse?'[E] '+stage.objective+' 작동':'';$('touchUse').dataset.ready=String(canUse);if(state.relays===3&&(!boss||boss.hp<=0)&&camera.position.distanceTo(new T.Vector3(108,1.65,13))<3)end(true);noticeTime-=dt;if(noticeTime<=0)$('notice').textContent='';}
 for(let i=sparks.length-1;i>=0;i--){const p=sparks[i];if(state.mode==='playing'){p.life-=dt;p.v.y-=dt*8;p.m.position.addScaledVector(p.v,dt);}if(p.life<=0){scene.remove(p.m);p.m.geometry.dispose();p.m.material.dispose();sparks.splice(i,1);}}
 weaponArt.models.forEach((m,i)=>m.visible=i===state.weapon);muzzle=weaponArt.muzzles[state.weapon];
 gun.position.set(.25+(reducedMotion?0:Math.sin(state.time*6)*.014*moveBlend),-.27-(state.reload>0?.23:0)+(reducedMotion?0:Math.cos(state.time*12)*.009*moveBlend),-.58+state.recoil*[.09,.17,.07][state.weapon]);
@@ -204,23 +205,85 @@ if(weaponArt.pumps[1])weaponArt.pumps[1].position.z=-.49+state.recoil*.12;
 camera.rotation.z=reducedMotion?0:Math.sin(state.time*67)*state.hurt*.009;flashLight.intensity*=.6;
 for(const flash of weaponArt.muzzles)if(state.recoil<.6)flash.visible=false;
 $('dashStatus').textContent=state.dashCooldown>0?'DASH · '+state.dashCooldown.toFixed(1)+'s':'DASH READY · SPACE';$('dashStatus').dataset.ready=String(state.dashCooldown<=0);$('touchDash').disabled=state.dashCooldown>0;
-$('healthFill').style.width=state.hp+'%';$('healthFill').dataset.low=String(state.hp<=30);$('ammoFill').style.width=(state.rounds[state.weapon]/specs[state.weapon].cap*100)+'%';$('runTime').textContent=Math.floor(state.time/60)+':'+String(Math.floor(state.time%60)).padStart(2,'0');
+$('healthFill').style.width=state.hp+'%';$('healthFill').dataset.low=String(state.hp<=30);const reloading=state.reload>0,reloadProgress=(1-state.reload/reloadTimes[state.weapon])*100;
+const mobileReload=reloading&&document.body.classList.contains('touch-controls'),ammoFill=$('ammoFill');
+ammoFill.dataset.reloading=String(mobileReload);
+ammoFill.style.width=(mobileReload?reloadProgress:state.rounds[state.weapon]/specs[state.weapon].cap*100)+'%';$('runTime').textContent=Math.floor(state.time/60)+':'+String(Math.floor(state.time%60)).padStart(2,'0');
 document.querySelectorAll('[data-weapon]').forEach(el=>el.setAttribute('aria-pressed',String(Number(el.dataset.weapon)===state.weapon)));
-hitTimer=Math.max(0,hitTimer-dt);$('crosshair').classList.toggle('hit',hitTimer>0);$('crosshair').textContent='';$('crosshair').style.setProperty('--reticle-scale',String(1+state.recoil*.45));$('hitText').textContent=hitTimer>0?hitLabel:'';$('damage').style.opacity=state.hurt*.35;$('hp').textContent=state.hp;$('ammo').textContent=state.rounds[state.weapon]+' / '+state.reserve[state.weapon];$('weapon').textContent=state.reload>0?'RELOADING · 장전 중':specs[state.weapon].name;$('reloadProgress').hidden=state.reload<=0;$('reloadBar').style.width=(100*(1-state.reload/[1.2,1.8,1.4][state.weapon]))+'%';$('kills').textContent=state.kills+' / '+enemies.length;$('objective').textContent=state.relays===3?(boss&&boss.hp>0?'수호기 제압 후 탈출':'탈출구로 이동'):stage.objective+' '+state.relays+' / 3';if(state.relays===3&&(!boss||boss.hp<=0))exit.material=green;$('bossBar').hidden=!boss||boss.hp<=0||state.mode==='title';if(boss)$('bossFill').style.width=Math.max(0,boss.hp/600*100)+'%';const remaining=relays.filter(r=>!r.on).sort((a,b)=>a.g.position.distanceTo(camera.position)-b.g.position.distanceTo(camera.position));const target=remaining[0]?.g.position || (boss&&boss.hp>0?boss.g.position:new T.Vector3(108,1.65,13));const bearing=Math.atan2(-(target.x-camera.position.x),-(target.z-camera.position.z));const angle=Math.atan2(Math.sin(bearing-yaw),Math.cos(bearing-yaw));const arrow=Math.abs(angle)<.3?'↑':Math.abs(angle)>2.6?'↶':angle>0?'←':'→';$('waypoint').textContent=arrow+' '+(remaining.length?stage.objective+' '+String.fromCharCode(65+relays.indexOf(remaining[0])):boss&&boss.hp>0?'중앙 수호기':'탈출구')+' · '+Math.round(target.distanceTo(camera.position))+'m'+(target.distanceTo(camera.position)<3?' [E] 작동':'');const map=$('map').getContext('2d');map.fillStyle='#050b10';map.fillRect(0,0,155,125);const cx=Math.round(camera.position.x/4),cz=Math.round(camera.position.z/4);for(let z=cz-3;z<=cz+3;z++)for(let x=cx-3;x<=cx+3;x++)visitedCells.add(x+','+z);for(let z=0;z<25;z++)for(let x=0;x<31;x++)if(!grid[z][x]){map.fillStyle=visitedCells.has(x+','+z)?'#617782':'#1b2a34';map.fillRect(x*5,z*5,5,5);}for(const r of relays){map.fillStyle=r.on?'#78e7a6':'#f7b844';map.fillRect(r.g.position.x/4*5-2,r.g.position.z/4*5-2,4,4);}map.fillStyle='#80e9ee';map.beginPath();map.arc(camera.position.x/4*5,camera.position.z/4*5,2.5,0,Math.PI*2);map.fill();renderer.render(scene,camera);}
+hitTimer=Math.max(0,hitTimer-dt);$('crosshair').classList.toggle('hit',hitTimer>0);$('crosshair').textContent='';$('crosshair').style.setProperty('--reticle-scale',String(1+state.recoil*.45));$('hitText').textContent=hitTimer>0?hitLabel:'';$('damage').style.opacity=state.hurt*.35;$('hp').textContent=state.hp;$('ammo').textContent=state.rounds[state.weapon]+' / '+state.reserve[state.weapon];$('weapon').textContent=state.reload>0?'RELOADING · 장전 중':specs[state.weapon].name;$('reloadProgress').hidden=state.reload<=0;$('reloadBar').style.width=reloadProgress+'%';$('kills').textContent=state.kills+' / '+enemies.length;$('objective').textContent=state.relays===3?(boss&&boss.hp>0?'수호기 제압 후 탈출':'탈출구로 이동'):stage.objective+' '+state.relays+' / 3';if(state.relays===3&&(!boss||boss.hp<=0))exit.material=green;$('bossBar').hidden=!boss||boss.hp<=0||state.mode==='title';if(boss)$('bossFill').style.width=Math.max(0,boss.hp/600*100)+'%';const remaining=relays.filter(r=>!r.on).sort((a,b)=>a.g.position.distanceTo(camera.position)-b.g.position.distanceTo(camera.position));const target=remaining[0]?.g.position || (boss&&boss.hp>0?boss.g.position:new T.Vector3(108,1.65,13));const bearing=Math.atan2(-(target.x-camera.position.x),-(target.z-camera.position.z));const angle=Math.atan2(Math.sin(bearing-yaw),Math.cos(bearing-yaw));const arrow=Math.abs(angle)<.3?'↑':Math.abs(angle)>2.6?'↶':angle>0?'←':'→';$('waypoint').textContent=arrow+' '+(remaining.length?stage.objective+' '+String.fromCharCode(65+relays.indexOf(remaining[0])):boss&&boss.hp>0?'중앙 수호기':'탈출구')+' · '+Math.round(target.distanceTo(camera.position))+'m'+(target.distanceTo(camera.position)<3&&remaining.length?(document.body.classList.contains('touch-controls')?' · 작동 가능':' [E] 작동'):'');const map=$('map').getContext('2d');map.fillStyle='#050b10';map.fillRect(0,0,155,125);const cx=Math.round(camera.position.x/4),cz=Math.round(camera.position.z/4);for(let z=cz-3;z<=cz+3;z++)for(let x=cx-3;x<=cx+3;x++)visitedCells.add(x+','+z);for(let z=0;z<25;z++)for(let x=0;x<31;x++)if(!grid[z][x]){map.fillStyle=visitedCells.has(x+','+z)?'#617782':'#1b2a34';map.fillRect(x*5,z*5,5,5);}for(const r of relays){map.fillStyle=r.on?'#78e7a6':'#f7b844';map.fillRect(r.g.position.x/4*5-2,r.g.position.z/4*5-2,4,4);}map.fillStyle='#80e9ee';map.beginPath();map.arc(camera.position.x/4*5,camera.position.z/4*5,2.5,0,Math.PI*2);map.fill();renderer.render(scene,camera);}
 window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});$('loadStatus').textContent='준비 완료 · PC 또는 모바일 터치 조작';requestAnimationFrame(frame);
 
 const touchEnabled=matchMedia('(pointer:coarse)').matches||navigator.maxTouchPoints>0;
-function setTouchControls(enabled){enabled=Boolean(enabled);const changed=document.body.classList.contains('touch-controls')!==enabled;document.body.classList.toggle('touch-controls',enabled);$('touchToggle').setAttribute('aria-pressed',String(Boolean(enabled)));$('overlay').querySelector('.controls').textContent=enabled?'왼쪽 이동 · 화면 드래그 조준 · FIRE 사격 · 돌진 / 장전 / 작동 / 무기':'WASD 이동 · 마우스 조준 / 클릭 사격 · Shift 달리기 · Space 돌진 · R 장전 · 1/2/3 무기 · E 작동 · P / Esc 일시정지';if(changed)clearKeys();}
+function setTouchControls(enabled){enabled=Boolean(enabled);const changed=document.body.classList.contains('touch-controls')!==enabled;document.body.classList.toggle('touch-controls',enabled);$('touchToggle').setAttribute('aria-pressed',String(Boolean(enabled)));$('overlay').querySelector('.controls').textContent=enabled?'왼쪽으로 이동하고 화면을 밀어 조준하세요. FIRE를 누른 채 밀면 조준과 사격을 함께 할 수 있습니다.':'WASD 이동 · 마우스 조준 / 클릭 사격 · Shift 달리기 · Space 돌진 · R 장전 · 1/2/3 무기 · E 작동 · P / Esc 일시정지';if(changed)clearKeys();}
 $('touchToggle').onclick=()=>setTouchControls(!document.body.classList.contains('touch-controls'));
-let moveId=null,lookId=null,lastTouch={x:0,y:0};const pad=$('fpsPad');
-function resetPad(){moveId=null;for(const k of ['KeyW','KeyA','KeyS','KeyD'])keys[k]=false;pad.querySelector('i').style.transform='translate(0,0)';}
-function movePad(e){if(e.pointerId!==moveId)return;const r=pad.getBoundingClientRect();let x=(e.clientX-r.left-r.width/2)/(r.width*.32),y=(e.clientY-r.top-r.height/2)/(r.height*.32),l=Math.max(1,Math.hypot(x,y));x/=l;y/=l;keys.KeyA=x<-.2;keys.KeyD=x>.2;keys.KeyW=y<-.2;keys.KeyS=y>.2;pad.querySelector('i').style.transform='translate('+x*28+'px,'+y*28+'px)';}
-pad.onpointerdown=e=>{if(moveId!==null)return;e.preventDefault();moveId=e.pointerId;pad.setPointerCapture(moveId);movePad(e);};pad.onpointermove=movePad;for(const t of ['pointerup','pointercancel','lostpointercapture'])pad.addEventListener(t,e=>{if(e.pointerId===moveId)resetPad();});
-renderer.domElement.addEventListener('pointerdown',e=>{if(e.pointerType!=='touch'||state.mode!=='playing'||lookId!==null)return;e.preventDefault();lookId=e.pointerId;lastTouch={x:e.clientX,y:e.clientY};renderer.domElement.setPointerCapture(lookId);});
-renderer.domElement.addEventListener('pointermove',e=>{if(e.pointerId!==lookId||state.mode!=='playing')return;yaw-=(e.clientX-lastTouch.x)*.005;pitch=T.MathUtils.clamp(pitch-(e.clientY-lastTouch.y)*.005,-1.35,1.35);lastTouch={x:e.clientX,y:e.clientY};});for(const t of ['pointerup','pointercancel','lostpointercapture'])renderer.domElement.addEventListener(t,e=>{if(e.pointerId===lookId)lookId=null;});
-$('touchFire').onpointerdown=e=>{e.preventDefault();if(state.mode!=='playing')return;e.currentTarget.setPointerCapture(e.pointerId);mouseDown=true;shoot();};for(const t of ['pointerup','pointercancel','lostpointercapture'])$('touchFire').addEventListener(t,()=>mouseDown=false);
+let moveId=null, lookId=null, fireId=null;
+let moveX=0, moveZ=0, lastTouch={x:0,y:0}, lastFire={x:0,y:0};
+const pad=$('fpsPad'), padKnob=pad.querySelector('i'), fire=$('touchFire');
+function movementInput(){
+  const x=Number(!!(keys.KeyD||keys.ArrowRight))-Number(!!(keys.KeyA||keys.ArrowLeft));
+  const z=Number(!!(keys.KeyS||keys.ArrowDown))-Number(!!(keys.KeyW||keys.ArrowUp));
+  return x||z?[x,z]:[moveX,moveZ];
+}
+function resetPad(){
+  moveId=null;
+  moveX=0;
+  moveZ=0;
+  padKnob.style.transform='';
+}
+function movePad(event){
+  if(event.pointerId!==moveId)return;
+  const rect=pad.getBoundingClientRect();
+  const x=(event.clientX-rect.left-rect.width/2)/(rect.width*.32);
+  const z=(event.clientY-rect.top-rect.height/2)/(rect.height*.32);
+  const length=Math.hypot(x,z);
+  const strength=Math.max(0,(Math.min(1,length)-.15)/.85);
+  moveX=x/(length||1)*strength;
+  moveZ=z/(length||1)*strength;
+  padKnob.style.transform='translate('+moveX*rect.width*.24+'px,'+moveZ*rect.height*.24+'px)';
+}
+pad.onpointerdown=event=>{
+  if(state.mode!=='playing'||moveId!==null||event.button!==0)return;
+  event.preventDefault();
+  moveId=event.pointerId;
+  pad.setPointerCapture(moveId);
+  movePad(event);
+};
+pad.onpointermove=movePad;
+function dragAim(event, previous){
+  yaw-=(event.clientX-previous.x)*.005;
+  pitch=T.MathUtils.clamp(pitch-(event.clientY-previous.y)*.005,-1.35,1.35);
+  return {x:event.clientX,y:event.clientY};
+}
+renderer.domElement.addEventListener('pointerdown',event=>{
+  if(event.pointerType!=='touch'||state.mode!=='playing'||lookId!==null)return;
+  event.preventDefault();
+  lookId=event.pointerId;
+  lastTouch={x:event.clientX,y:event.clientY};
+  renderer.domElement.setPointerCapture(lookId);
+});
+renderer.domElement.addEventListener('pointermove',event=>{
+  if(event.pointerId===lookId&&state.mode==='playing')lastTouch=dragAim(event,lastTouch);
+});
+fire.onpointerdown=event=>{
+  if(state.mode!=='playing'||fireId!==null||event.button!==0)return;
+  event.preventDefault();
+  fireId=event.pointerId;
+  lastFire={x:event.clientX,y:event.clientY};
+  fire.setPointerCapture(fireId);
+  shoot();
+};
+fire.onpointermove=event=>{
+  if(event.pointerId!==fireId||state.mode!=='playing')return;
+  lastFire=lookId===null?dragAim(event,lastFire):{x:event.clientX,y:event.clientY};
+};
+for(const type of ['pointerup','pointercancel','lostpointercapture']){
+  pad.addEventListener(type,event=>{if(event.pointerId===moveId)resetPad();});
+  renderer.domElement.addEventListener(type,event=>{if(event.pointerId===lookId)lookId=null;});
+  fire.addEventListener(type,event=>{if(event.pointerId===fireId)fireId=null;});
+}
+matchMedia('(orientation: portrait)').addEventListener?.('change',clearKeys);
 $('touchDash').onclick=dash;
-$('touchReload').onclick=()=>{if(state.mode==='playing')reload();};$('touchUse').onclick=()=>{if(state.mode==='playing')interact();};$('touchWeapon').onclick=()=>{if(state.mode==='playing'){state.weapon=(state.weapon+1)%3;state.reload=0;}};$('touchPause').onclick=()=>{pause();document.exitPointerLock?.();resetPad();lookId=null;};
+$('touchReload').onclick=()=>{if(state.mode==='playing')reload();};$('touchUse').onclick=()=>{if(state.mode==='playing')interact();};$('touchWeapon').onclick=()=>{if(state.mode==='playing'){state.weapon=(state.weapon+1)%3;state.reload=0;}};$('touchPause').onclick=()=>{pause();document.exitPointerLock?.();};
 
 $('touchFire').onclick=e=>{if(e.detail===0&&state.mode==='playing')shoot();};
 

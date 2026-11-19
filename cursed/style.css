@@ -8,3 +8,36 @@
 #heading:not(.sr-only){font-size:27px;font-weight:500;letter-spacing:1px;margin:0 0 18px}.intro header,.intro footer{visibility:hidden}@media(max-width:600px){#gestureTip{bottom:90px;font-size:11px}#heading:not(.sr-only){font-size:25px}}
 
 @media(orientation:landscape) and (max-height:360px){#overlay{justify-content:flex-start;padding:12px 20px}#logo{width:150px;margin:0 0 6px}.intro #description,#help .hint,#gestureTip{display:none}#subtitle{font-size:14px;margin-bottom:6px}#help{margin:3px 0 8px}#description{font-size:11px;line-height:1.5;margin-bottom:8px}#heading:not(.sr-only){font-size:22px;margin:4px 0 8px}#choices button{min-height:85px;padding:10px}#choices strong{font-size:13px;margin-bottom:5px}#choices span{font-size:11px}#back{padding:5px;min-height:28px}#best{margin:3px 0}}
+
+/* Keep the aiming indicator visible when a swipe starts near an edge. */
+#gesturePad{
+  --pad-radius:44px;
+  left:clamp(var(--pad-radius),var(--aim-x,50%),calc(100% - var(--pad-radius)));
+  top:clamp(var(--pad-radius),var(--aim-y,50%),calc(100% - var(--pad-radius)));
+  width:calc(2 * var(--pad-radius));
+  height:calc(2 * var(--pad-radius));
+}
+#gesturePad i{width:36px;height:36px}
+.touch-mode header{
+  padding-inline:max(12px,env(safe-area-inset-left)) max(12px,env(safe-area-inset-right));
+}
+.touch-mode header button,.touch-mode #back,.touch-mode .primary{min-width:44px;min-height:44px}
+.touch-mode footer{
+  padding-left:max(12px,env(safe-area-inset-left));
+  padding-right:max(12px,env(safe-area-inset-right));
+}
+.touch-mode #gestureTip{
+  bottom:96px;
+  margin:0;
+  padding:4px 8px;
+  border:1px solid #796d56;
+  background:#151b23;
+  font-size:12px;
+}
+.touch-mode #overlay{justify-content:safe center}
+.touch-mode #overlay>*{flex-shrink:0}
+@media(orientation:landscape) and (max-height:500px){
+  .touch-mode #boss{top:60px}
+  .touch-mode #gestureTip{display:block;bottom:82px}
+  .touch-mode #fullscreen{display:none}
+}

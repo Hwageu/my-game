@@ -37,6 +37,9 @@ let showHitbox = showDebug;
 let playerSpeed = 2;
 const keys = {};
 const joystickKeys = {};
+const neonPad = document.getElementById("neonPad");
+const neonKnob = neonPad.querySelector("i");
+let neonPointer = null, neonTouchX = 0, neonTouchY = 0;
 let embeddedActive = false;
 let embeddedGame=1;
 function embeddedFrame(){return document.getElementById(embeddedGame===2?"cursedFrame":"fpsFrame");}
@@ -881,23 +884,19 @@ function updateJoystick() {
 function releaseKeys() {
   for (const key of Object.keys(keys)) keys[key] = false;
   for (const key of Object.keys(joystickKeys)) joystickKeys[key] = false;
+  resetNeonPad();
   updateJoystick();
 }
 
 function updatePlayer() {
-  let moveX = 0;
-  let moveY = 0;
-  // 각 if를 따로 검사하므로 두 키를 누르면 대각선으로 이동합니다.
-  if (keys["ArrowLeft"]) moveX = moveX - 1;
-  if (keys["ArrowRight"]) moveX = moveX + 1;
-  if (keys["ArrowUp"]) moveY = moveY - 1;
-  if (keys["ArrowDown"]) moveY = moveY + 1;
+  const keyX = Number(!!keys.ArrowRight) - Number(!!keys.ArrowLeft);
+  const keyY = Number(!!keys.ArrowDown) - Number(!!keys.ArrowUp);
+  const moveX = keyX || keyY ? keyX : neonTouchX;
+  const moveY = keyX || keyY ? keyY : neonTouchY;
   const length = Math.hypot(moveX, moveY);
-  if (length > 0) {
-    // 대각선에서도 직선과 같은 속도를 유지합니다.
-    player.x = player.x + moveX / length * playerSpeed;
-    player.y = player.y + moveY / length * playerSpeed;
-  }
+  const scale = playerSpeed / Math.max(1, length);
+  player.x += moveX * scale;
+  player.y += moveY * scale;
   player.moving = length > 0;
   // 마지막 방향을 유지하므로 손을 떼어도 대기 자세가 같은 방향을 바라봅니다.
   if (moveY < 0) player.direction = 3;
@@ -1046,7 +1045,7 @@ function launchMenuGame() {
     document.getElementById("fpsConsole").hidden = selectedMenuGame!==1;
     document.getElementById("cursedConsole").hidden = selectedMenuGame!==2;
     const frame = embeddedFrame();
-    if (!frame.getAttribute("src")) frame.src = selectedMenuGame===2 ? "cursed/index.html?v=20261119-audit" : "fps/index.html?v=20261119-audit";
+    if (!frame.getAttribute("src")) frame.src = selectedMenuGame===2 ? "cursed/index.html?v=20261119-mobile" : "fps/index.html?v=20261119-mobile";
     else syncEmbeddedPreferences();
     document.getElementById("menuButton").disabled = false;
     document.getElementById("pauseButton").disabled = false;
@@ -1110,11 +1109,40 @@ document.addEventListener("visibilitychange",syncMenuMusic);
 let coinAudio;
 document.getElementById("coinInsert").addEventListener("click",function(){try{if(!isMuted){coinAudio ||= new AudioContext();coinAudio.resume();[1175,1760,2349].forEach((f,i)=>{const o=coinAudio.createOscillator(),g=coinAudio.createGain(),t=coinAudio.currentTime+i*.07;o.type='square';o.frequency.value=f;g.gain.setValueAtTime(isMuted?0:.035,t);g.gain.exponentialRampToValueAtTime(.0001,t+.12);o.connect(g).connect(coinAudio.destination);o.start(t);o.stop(t+.13);});}this.classList.remove('coin-flash');void this.offsetWidth;this.classList.add('coin-flash');}catch{}});
 
-const neonPad=document.getElementById('neonPad');let neonPointer=null;
-function resetNeonPad(){neonPointer=null;neonPad.querySelector('i').style.transform='translate(0,0)';releaseKeys();}
-function moveNeonPad(e){if(e.pointerId!==neonPointer)return;const r=neonPad.getBoundingClientRect();let x=(e.clientX-r.left-r.width/2)/(r.width*.32),y=(e.clientY-r.top-r.height/2)/(r.height*.32);const l=Math.max(1,Math.hypot(x,y));x/=l;y/=l;neonPad.querySelector('i').style.transform='translate('+x*28+'px,'+y*28+'px)';for(const [k,v] of Object.entries({ArrowLeft:x<-.2,ArrowRight:x>.2,ArrowUp:y<-.2,ArrowDown:y>.2})){keys[k]=gameState==='playing'&&v;joystickKeys[k]=v;}updateJoystick();}
-neonPad.addEventListener('pointerdown',e=>{if(neonPointer!==null)return;e.preventDefault();neonPointer=e.pointerId;neonPad.setPointerCapture(e.pointerId);moveNeonPad(e);});neonPad.addEventListener('pointermove',moveNeonPad);for(const event of ['pointerup','pointercancel','lostpointercapture'])neonPad.addEventListener(event,e=>{if(e.pointerId===neonPointer)resetNeonPad();});
-document.getElementById('neonTouchPause').onclick=()=>{if(gameState==='playing'||gameState==='countdown')pauseGame();else if(gameState==='paused')resumeGame();resetNeonPad();};document.getElementById('neonTouchRestart').onclick=()=>{resetNeonPad();resetGame();};
+function resetNeonPad() {
+  const id = neonPointer;
+  neonPointer = null;
+  neonTouchX = 0;
+  neonTouchY = 0;
+  neonKnob.style.transform = "";
+  if (id !== null && neonPad.hasPointerCapture(id)) neonPad.releasePointerCapture(id);
+}
+function moveNeonPad(event) {
+  if (event.pointerId !== neonPointer) return;
+  const rect = neonPad.getBoundingClientRect();
+  const x = (event.clientX - rect.left - rect.width / 2) / (rect.width * .32);
+  const y = (event.clientY - rect.top - rect.height / 2) / (rect.height * .32);
+  const length = Math.hypot(x, y);
+  const strength = Math.max(0, (Math.min(1, length) - .15) / .85);
+  neonTouchX = x / (length || 1) * strength;
+  neonTouchY = y / (length || 1) * strength;
+  neonKnob.style.transform = "translate(" + neonTouchX * rect.width * .24 + "px," + neonTouchY * rect.height * .24 + "px)";
+}
+neonPad.addEventListener("pointerdown", event => {
+  if (gameState !== "playing" || neonPointer !== null || event.button !== 0) return;
+  event.preventDefault();
+  neonPointer = event.pointerId;
+  neonPad.setPointerCapture(neonPointer);
+  moveNeonPad(event);
+});
+neonPad.addEventListener("pointermove", moveNeonPad);
+for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) {
+  neonPad.addEventListener(type, event => {
+    if (event.pointerId === neonPointer) resetNeonPad();
+  });
+}
+matchMedia("(orientation: portrait)").addEventListener?.("change", resetNeonPad);
+document.getElementById('neonTouchPause').onclick=()=>{if(gameState==='playing'||gameState==='countdown')pauseGame();else if(gameState==='paused')resumeGame();};document.getElementById('neonTouchRestart').onclick=resetGame;
 
 function applyAudioMute(value, notifyFrame=true) {
   isMuted=Boolean(value);try{localStorage.setItem('neonArcadeMuted',String(isMuted));}catch{}

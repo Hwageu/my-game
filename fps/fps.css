@@ -70,3 +70,44 @@ button[aria-pressed=true]{border-color:#ffd28b;color:#ffd28b}
 #hud small,.touch-controls #hud small,#runTime{font-size:11px}
 
 #dashStatus{position:fixed;bottom:153px;left:50%;transform:translateX(-50%);font-size:11px;letter-spacing:1px;color:#839299;pointer-events:none}#dashStatus[data-ready=true]{color:#a2dcce}.touch-controls #dashStatus{bottom:110px}.touch-tools button{min-width:44px}.touch-tools button:disabled{opacity:.5}@media(max-width:500px){.touch-tools{gap:5px}.touch-tools button{font-size:11px;max-width:62px}.touch-controls #dashStatus{bottom:115px}#dashStatus{bottom:165px}}@media(orientation:landscape) and (max-height:500px){.touch-controls #dashStatus{bottom:47px;left:30%;font-size:10px}#dashStatus{bottom:125px}}
+
+/* Keep thumb controls clear of the instrument strip. */
+.touch-controls{--hud-height:88px;--thumb-inset:16px}
+.touch-controls #hud{
+  height:var(--hud-height);
+  padding-left:max(12px,env(safe-area-inset-left));
+  padding-right:max(12px,env(safe-area-inset-right));
+}
+.touch-controls header{pointer-events:none}
+.touch-controls header button{pointer-events:auto;min-height:44px;touch-action:manipulation}
+.touch-controls #dragMode,.touch-controls #dashStatus{display:none}
+.touch-controls #overlay{overflow:auto;justify-content:safe center;padding-block:12px}
+.touch-controls #overlay button{min-height:44px;touch-action:manipulation}
+.touch-controls #overlay>*{flex-shrink:0}
+.touch-controls .touch-tools{bottom:calc(var(--hud-height) + 4px);gap:6px;pointer-events:none}
+.touch-controls .touch-tools button{pointer-events:auto;min-height:44px}
+.touch-controls #fpsPad{left:max(var(--thumb-inset),env(safe-area-inset-left))}
+.touch-controls #touchFire{right:max(var(--thumb-inset),env(safe-area-inset-right))}
+.touch-controls #touchFire:active{background:#cd583a;color:#fff0d7}
+.touch-controls #prompt{display:none}
+.touch-controls #touchUse[data-ready=true]{border-color:#86d8bf;color:#c5f1e4;background:#165348}
+.touch-controls header #objective{font-size:11px;line-height:1.3}
+.touch-controls #reloadProgress{display:none}
+.touch-controls #ammoFill[data-reloading=true]{background:#86d8bf}
+@media(orientation:portrait){
+  .touch-controls #fpsPad{bottom:calc(var(--hud-height) + 59px);width:clamp(90px,29vw,110px);height:clamp(90px,29vw,110px)}
+  .touch-controls #touchFire{bottom:calc(var(--hud-height) + 66px)}
+}
+@media(orientation:landscape) and (max-height:550px){
+  .touch-controls{--hud-height:74px;--thumb-inset:14px}
+  .touch-controls #fpsPad{bottom:calc(var(--hud-height) + 5px);width:82px;height:82px}
+  .touch-controls #touchFire{bottom:calc(var(--hud-height) + 5px);width:72px;height:72px}
+  .touch-controls #waypoint{top:56px}
+  .touch-controls #map{top:56px;right:max(16px,env(safe-area-inset-right))}
+  .touch-controls #overlay .controls{display:block;margin-block:3px;font-size:11px;line-height:1.4}
+}
+@media(orientation:landscape) and (max-height:300px){
+  .touch-controls #overlay h1{font-size:27px}
+  .touch-controls #overlay h1 br{display:none}
+  .touch-controls #overlay h1 em::before{content:" "}
+}
