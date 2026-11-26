@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>TIDELINE GP · 인디 힐 서킷</title>
-  <link rel="stylesheet" href="race.css?v=7">
+  <link rel="stylesheet" href="race.css?v=8">
 </head>
 <body>
   <main class="cab" aria-label="타이드라인 그랑프리">
@@ -13,7 +13,7 @@
       <div class="top">
         <dl class="instruments">
           <div class="position"><dt>현재 순위</dt><dd><strong id="place">5</strong><span class="place-total">위 / 6대</span></dd></div>
-          <div class="race-metric"><dt>바퀴</dt><dd id="lap">1 / 2</dd></div>
+          <div class="race-metric"><dt>바퀴</dt><dd id="lap">1 / 3</dd></div>
           <div class="race-metric"><dt>시간</dt><dd id="time">00:00.00</dd></div>
         </dl>
         <figure id="courseMap" class="course-map" hidden>
@@ -36,13 +36,15 @@
       <div class="speed" aria-hidden="true"><span id="boost" hidden>BOOST</span><strong id="speed">0</strong> km/h</div>
       <div class="drift-status" id="driftStatus" hidden data-tier="0"><span id="driftLabel">드리프트</span><div class="drift-meter" aria-hidden="true"><i id="driftFill"></i></div></div>
       <div id="countdown" hidden aria-live="polite"></div>
+      <p class="launch-hint" id="launchHint" hidden></p>
       <section class="overlay" id="overlay" aria-labelledby="title">
         <div class="panel">
           <h1 id="title">TIDELINE <span>GP</span></h1>
-          <p id="course">인디 힐 서킷 · 6대 · 2바퀴</p>
+          <p id="course">인디 힐 서킷 · 6대 · 3바퀴</p>
           <p id="help">↑ 가속 · ↓ 브레이크 · ← → 조향 · Shift 드리프트</p>
           <p id="best" hidden></p>
           <button type="button" class="primary" id="start">경주 시작</button>
+          <button type="button" id="recover" hidden>트랙 복귀</button>
           <button type="button" id="back">게임 선택</button>
         </div>
       </section>
@@ -59,6 +61,6 @@
       </div>
     </div>
   </main>
-  <script type="module" src="race.js?v=7"></script>
+  <script type="module" src="race.js?v=8"></script>
 </body>
 </html>

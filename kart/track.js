@@ -1,6 +1,6 @@
-export const SEGMENT = 88;
-export const ROAD = 460;
-export const LAPS = 2;
+import {LENGTH, ROAD, SEGMENT, coursePose, keepInField, projectOnCourse} from './course.js?v=2';
+export {LENGTH,ROAD,SEGMENT};
+export const LAPS = 3;
 export const TOP_SPEED = 1270;
 export const COUNTDOWN = 3;
 export const DRIFT_FIRST = .48;
@@ -45,7 +45,7 @@ const sections = [
   [21,  0,    'pit',    54], // Approach to start/finish
 ];
 const segmentCount = sections.reduce((sum, [length]) => sum + length, 0);
-export const LENGTH = segmentCount * SEGMENT;
+if(segmentCount*SEGMENT!==LENGTH) throw Error('Course length and sections must match');
 const boosts = [{segment:176, lane:-.41}, {segment:251, lane:.52}];
 const signs = new Map([[27,1],[72,2],[78,2],[128,-1],[160,-1],[166,-1],[189,-1],[211,1],[253,1]]);
 const limit = (value, low, high) => Math.max(low, Math.min(high, value));
@@ -101,18 +101,22 @@ const styles = [
   { look:820, brake:.019, line:.18, passing:1.36, drift:8.5 },
   { look:930, brake:.022, line:-.06, passing:.93, drift:10.6 },
 ];
-const grid = [[-.45,-210],[.45,-90],[-.45,-90],[-.45,-150],[.45,-150],[.45,-210]];
+const grid = [[-.45,-320],[.45,-70],[-.45,-70],[-.45,-195],[.45,-195],[.45,-320]];
 
 export function createRace(random=Math.random) {
   const racers = drivers.map(([name, color, light, shade], id) => ({
     id, name, color, light, shade, x: grid[id][0], distance: grid[id][1],
-    speed:0, steering:0, boost:0, turbo:0, turboLevel:0, driftSide:0, driftCharge:0,
+    speed:0, steering:0, launchBoost:0, boost:0, turbo:0, turboLevel:0, driftSide:0, driftCharge:0,
     hit:0, lane:grid[id][0], finished:null,
     items:[], lastBox:null, effects:[], itemBoost:0, chaseBoost:0, shield:0, slow:0, grip:0,
-    slide:0, nextSkid:0,
+    slide:0, nextSkid:0, contactAt:-Infinity, contactSide:0,
   }));
+  for(const racer of racers){
+    placeKart(racer,racer.distance,racer.x);
+    racer.safe={distance:racer.distance,lane:racer.x};
+  }
   const boxes=boxRows.flatMap(segment=>boxLanes.map(x=>({x,distance:segment*SEGMENT+SEGMENT/2,readyAt:0})));
-  return {time:0,racers,player:racers[0],lastLap:1,finishPlace:null,random,boxes,traps:[],discs:[],skids:[],itemEvent:null};
+  return {time:0,racers,player:racers[0],lastLap:1,finishPlace:null,random,boxes,traps:[],discs:[],skids:[],itemEvent:null,contact:null};
 }
 
 export function lapAt(distance) {
@@ -123,6 +127,79 @@ export function order(racers) {
   return [...racers].sort((a,b) =>
     (a.finished ?? Infinity) - (b.finished ?? Infinity) || b.distance - a.distance || a.id - b.id
   );
+}
+
+const angleBetween=(a,b)=>Math.atan2(Math.sin(a-b),Math.cos(a-b));
+const launchMin=.12, launchMax=1;
+
+export function applyStartBoost(racer,secondsHeld) {
+  if(secondsHeld<launchMin||secondsHeld>launchMax||!Number.isFinite(secondsHeld)) return false;
+  racer.launchBoost=.88;
+  racer.speed=Math.max(racer.speed,540);
+  return true;
+}
+
+export function launchRace(race,heldFor) {
+  const timings=[.71,.25,1.14,.87,.05];
+  race.racers.slice(1).forEach((racer,i)=>applyStartBoost(racer,timings[i]));
+  return applyStartBoost(race.player,heldFor);
+}
+
+export function placeKart(racer,distance,lane) {
+  const point=coursePose(distance,lane);
+  Object.assign(racer,{distance,x:lane,worldX:point.x,worldZ:point.z,heading:point.angle});
+}
+
+export function recoverKart(race) {
+  const racer=race.player, stored=racer.safe;
+  const lanes=[limit(stored.lane,-.42,.42),0,-.47,.47];
+  // Try the last safe part of the course first, leaving room for traffic.
+  let found=false;
+  for(let step=1;step<=7;step++){
+    const distance=stored.distance-step*SEGMENT;
+    const lane=lanes.find(lane=>{
+      const point=coursePose(distance,lane);
+      return !race.racers.some(other=>other!==racer&&other.finished===null&&
+        Math.hypot(point.x-other.worldX,point.z-other.worldZ)<116);
+    });
+    if(lane===undefined) continue;
+    placeKart(racer,distance,lane);
+    found=true;
+    break;
+  }
+  if(!found) placeKart(racer,stored.distance-8*SEGMENT,0);
+  racer.speed=0;
+  racer.steering=0;
+  racer.slide=0;
+  racer.hit=.58;
+  racer.launchBoost=0;
+  racer.itemBoost=0;
+  racer.chaseBoost=0;
+  racer.turbo=0;
+  racer.boost=0;
+  cancelDrift(racer);
+  race.lastLap=lapAt(racer.distance);
+}
+
+function moveKart(racer,dt) {
+  const forwardX=Math.cos(racer.heading),forwardZ=Math.sin(racer.heading);
+  const travel=racer.speed*dt;
+  const next=keepInField({x:racer.worldX+forwardX*travel,z:racer.worldZ+forwardZ*travel});
+  const dx=next.x-racer.worldX,dz=next.z-racer.worldZ;
+  const center=coursePose(racer.distance);
+  const along=dx*center.rightZ-dz*center.rightX;
+  const cross=projectOnCourse(next.x,next.z,racer.distance);
+  const cap=Math.max(0,Math.hypot(dx,dz)*1.75);
+  const advance=limit(cross-racer.distance,Math.min(0,along*2.10),Math.max(0,along*2.10));
+  racer.distance+=limit(advance,-cap,cap);
+  racer.worldX=next.x;
+  racer.worldZ=next.z;
+  const foot=coursePose(racer.distance);
+  racer.x=((next.x-foot.x)*foot.rightX+(next.z-foot.z)*foot.rightZ)/ROAD;
+  const here=segmentAt(racer.distance);
+  if(Math.abs(racer.x)<here.width-.24&&along>0&&Math.abs(angleBetween(racer.heading,foot.angle))<.68) {
+    racer.safe={distance:racer.distance,lane:racer.x};
+  }
 }
 
 function raceGap(from, to) {
@@ -322,31 +399,25 @@ function planAI(racer,race) {
     }
   }
   racer.lane = lane;
-  const brake = racer.speed > target + 37;
-  const ratio = racer.speed / TOP_SPEED;
-  const side = Math.sign(here.curve);
-  const drift = !brake && ratio>.55 && Math.abs(here.curve)>=style.drift &&
-    (racer.driftSide===side || Math.abs(racer.x-lane)<.38);
-  const adjust = (lane-racer.x)*3.1 + cornerSlip(here,ratio,drift,racer.grip>0);
-  let steer = adjust / steerRate(ratio,brake,drift);
-  if(drift) {
-    steer=(steer-side*.28)/.90;
-    if(!racer.driftSide) steer=side*Math.max(.28,steer*side);
-  }
-  return {brake,drift,throttle:racer.speed<=target,steer:limit(steer,-1,1),useItem:aiItem(race,racer,curve,traffic)};
+  const brake=racer.speed>target+33;
+  const ratio=racer.speed/TOP_SPEED;
+  const aimPoint=coursePose(racer.distance+155+ratio*160,lane);
+  const aim=angleBetween(Math.atan2(aimPoint.z-racer.worldZ,aimPoint.x-racer.worldX),racer.heading);
+  const drift=!brake&&ratio>.57&&Math.abs(here.curve)>=style.drift&&
+    Math.abs(aim)>.18&&Math.sign(aim)===Math.sign(here.curve)&&Math.abs(racer.x)<here.width-.09;
+  const steer=limit(aim*3.4,-1,1);
+  return {brake,drift,throttle:racer.speed<=target,steer,useItem:aiItem(race,racer,curve,traffic)};
 }
 
-function cornerSlip(segment,ratio,drifting,grip) {
-  return segment.curve*.174*ratio**2*(drifting?1.12:1)*(grip?.76:1);
-}
-
-function steerRate(ratio,brake,drifting) {
-  return .58+ratio*1.14+(brake?.55:0)+(drifting?.69:0);
+function steerRate(ratio,brake,drifting,grip) {
+  return (1.63+Math.min(1.35,ratio)*.45+(brake?.80:0)+(drifting?.90:0)+(grip?.27:0))*
+    Math.min(1,.55+ratio*.70);
 }
 
 function boostedSpeed(racer) {
   if(racer.chaseBoost>0) return 1740;
   if(racer.itemBoost>0) return 1610;
+  if(racer.launchBoost>0) return 1480;
   if(racer.boost>0) return 1580;
   if(racer.turbo>0) return racer.turboLevel===2?1560:1450;
   return TOP_SPEED;
@@ -380,6 +451,7 @@ function updateDrift(racer,input,here,offRoad,dt) {
 function drive(racer, dt, input) {
   const here = segmentAt(racer.distance);
   racer.hit = Math.max(0,racer.hit - dt);
+  racer.launchBoost=Math.max(0,racer.launchBoost-dt);
   racer.itemBoost=Math.max(0,racer.itemBoost-dt);
   racer.chaseBoost=Math.max(0,racer.chaseBoost-dt);
   racer.shield=Math.max(0,racer.shield-dt);
@@ -397,8 +469,7 @@ function drive(racer, dt, input) {
   const drifting=racer.driftSide!==0;
   const direction=drifting?limit(input.steer*.90+racer.driftSide*.28,-1.06,1.06):input.steer;
   racer.steering=direction;
-  const steer=racer.speed>30?direction*steerRate(ratio,input.brake,drifting):0;
-  racer.x=limit(racer.x+(steer-cornerSlip(here,ratio,drifting,grippy))*dt,-1.48,1.48);
+  if(racer.speed>25) racer.heading=angleBetween(racer.heading+direction*steerRate(ratio,input.brake,drifting,grippy)*dt,0);
 
   const ceiling=boostedSpeed(racer);
   const surfaceLimit=offRoad?(grippy?1020:490):ceiling;
@@ -407,6 +478,34 @@ function drive(racer, dt, input) {
   const acceleration=input.brake?-1110:ceiling>TOP_SPEED?1240:accelerating?625:-370;
   racer.speed = limit(racer.speed + acceleration * dt, 0, Math.max(racer.speed,target));
   if (racer.speed > target) racer.speed = Math.max(target,racer.speed - (offRoad ? 1460 : 550) * dt);
+}
+
+function resolveContacts(race) {
+  const {racers}=race;
+  for(let a=0;a<racers.length;a++) for(let b=a+1;b<racers.length;b++){
+    const first=racers[a],second=racers[b];
+    if(first.finished!==null||second.finished!==null||first.hit||second.hit) continue;
+    const dx=second.worldX-first.worldX,dz=second.worldZ-first.worldZ;
+    const gap=Math.hypot(dx,dz);
+    if(gap>=88) continue;
+    const normal=coursePose(first.distance);
+    const nx=gap>1?dx/gap:normal.rightX,nz=gap>1?dz/gap:normal.rightZ;
+    race.contact={x:(first.worldX+second.worldX)/2,z:(first.worldZ+second.worldZ)/2,time:race.time};
+    for(const [racer,side] of [[first,-1],[second,1]]){
+      const push=(94-gap)/2;
+      const position=keepInField({x:racer.worldX+nx*push*side,z:racer.worldZ+nz*push*side});
+      racer.worldX=position.x;
+      racer.worldZ=position.z;
+      racer.hit=.40;
+      racer.contactAt=race.time;
+      racer.contactSide=Math.sign((-Math.sin(racer.heading)*nx+Math.cos(racer.heading)*nz)*-side)||1;
+      if(!preventHit(race,racer)){
+        racer.speed*=.83;
+        racer.heading+=racer.contactSide*-.09;
+        cancelDrift(racer);
+      }
+    }
+  }
 }
 
 export function stepRace(race, dt, input) {
@@ -426,39 +525,24 @@ export function stepRace(race, dt, input) {
     const controls=racer===player?input:plans[racer.id-1];
     const from=racer.distance, startX=racer.x;
     drive(racer,dt,controls);
-    racer.distance=Math.min(finishLine,from+racer.speed*dt);
+    moveKart(racer,dt);
+    const reached=racer.distance;
+    racer.distance=Math.min(finishLine,reached);
     if(racer.driftSide&&race.time>=racer.nextSkid) {
       race.skids.push({x:racer.x,distance:racer.distance-62,side:racer.driftSide,time:race.time});
       racer.nextSkid=race.time+.075;
     }
-    moves.push({racer,from,to:racer.distance,startX,speed:racer.speed});
+    moves.push({racer,from,to:racer.distance,startX,reached});
   }
   resolveItems(race,moves);
   stepDiscs(race,dt,moves);
-  for(const {racer,from,speed} of moves) {
+  for(const {racer,from,reached} of moves) {
     if (racer.distance >= finishLine) {
-      racer.finished = race.time - dt + (finishLine-from)/Math.max(1,speed);
+      racer.finished = race.time-dt+dt*limit((finishLine-from)/Math.max(.001,reached-from),0,1);
       racer.distance = finishLine;
     }
   }
-  for (let a = 0; a < racers.length; a++) {
-    for (let b = a + 1; b < racers.length; b++) {
-      const first = racers[a], second = racers[b];
-      if (first.finished !== null || second.finished !== null || first.hit || second.hit) continue;
-      if (Math.abs(raceGap(first.distance,second.distance)) < 48 && Math.abs(first.x - second.x) < .29) {
-        const side = first.x <= second.x ? -1 : 1;
-        first.x = limit(first.x + side * .11, -1.48, 1.48);
-        second.x = limit(second.x - side * .11, -1.48, 1.48);
-        for(const racer of [first,second]){
-          if(!preventHit(race,racer)){
-            racer.speed*=.85;
-            cancelDrift(racer);
-          }
-        }
-        first.hit = second.hit = .42;
-      }
-    }
-  }
+  resolveContacts(race);
   race.lastLap = lapAt(player.distance);
   if (player.finished !== null && race.finishPlace === null) race.finishPlace = order(racers).indexOf(player) + 1;
 }

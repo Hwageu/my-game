@@ -1,4 +1,4 @@
-import {TOP_SPEED} from './track.js?v=7';
+import {TOP_SPEED} from './track.js?v=8';
 
 const cues = {
   picked: [[610,660,0,.10,'triangle'],[865,1010,.068,.15,'square']],
@@ -11,6 +11,9 @@ const cues = {
   pulse: [[630,155,0,.30,'triangle'],[240,80,.045,.24,'sine']],
   disc: [[505,860,0,.13,'square'],[640,330,.07,.18,'triangle']],
   chase: [[160,550,0,.36,'sawtooth'],[440,1180,.08,.29,'triangle']],
+  launch: [[220,670,0,.24,'square'],[540,1210,.075,.24,'triangle']],
+  recover: [[340,510,0,.17,'triangle']],
+  contact: [[118,45,0,.16,'triangle'],[330,120,.01,.09,'square']],
   turbo: [[190,520,0,.22,'triangle'],[490,840,.027,.17,'square']],
 };
 

@@ -1,4 +1,7 @@
-import {LENGTH, ROAD, SEGMENT, roadHeight, track} from './track.js?v=7';
+// Shared driving geometry and dimensions.
+export const SEGMENT=88;
+export const ROAD=460;
+export const LENGTH=311*SEGMENT;
 
 // Control points are shared by the overhead map and the perspective camera.
 const route = [
@@ -29,12 +32,34 @@ export function coursePose(distance,lane=0) {
   const angle=Math.atan2(front.y-back.y,front.x-back.x);
   const rightX=-Math.sin(angle),rightZ=Math.cos(angle);
   return {x:here.x*worldScale+lane*ROAD*rightX,z:here.y*worldScale+lane*ROAD*rightZ,
-    y:roadHeight(distance),angle,rightX,rightZ};
+    angle,rightX,rightZ};
 }
 
-export const course=track.map(segment=>({
-  segment,point:coursePose(segment.i*SEGMENT),
-}));
+const sampleStep=SEGMENT/2;
+const samples=Array.from({length:LENGTH/sampleStep},(_,i)=>coursePose(i*sampleStep));
+const sampleAt=i=>samples[wrap(i,samples.length)];
+const projectLimit=8;
+
+const padding=5*ROAD;
+const left=Math.min(...samples.map(p=>p.x))-padding;
+const right=Math.max(...samples.map(p=>p.x))+padding;
+const top=Math.min(...samples.map(p=>p.z))-padding;
+const bottom=Math.max(...samples.map(p=>p.z))+padding;
+export function keepInField(point) {
+  return {x:Math.min(right,Math.max(left,point.x)),z:Math.min(bottom,Math.max(top,point.z))};
+}
+
+export function projectOnCourse(worldX,worldZ,reference) {
+  const origin=Math.floor(reference/sampleStep);
+  let distance=reference,best=Infinity;
+  for(let i=origin-projectLimit;i<=origin+projectLimit;i++){
+    const a=sampleAt(i),b=sampleAt(i+1),dx=b.x-a.x,dz=b.z-a.z;
+    const factor=Math.min(1,Math.max(0,((worldX-a.x)*dx+(worldZ-a.z)*dz)/(dx*dx+dz*dz)));
+    const error=(a.x+dx*factor-worldX)**2+(a.z+dz*factor-worldZ)**2;
+    if(error<best){best=error;distance=(i+factor)*sampleStep;}
+  }
+  return distance;
+}
 
 export function roadPosition(point,lane,raise=0) {
   return {x:point.x+point.rightX*ROAD*lane,z:point.z+point.rightZ*ROAD*lane,y:point.y+raise};

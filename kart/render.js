@@ -1,5 +1,5 @@
-import {DRIFT_FIRST, DRIFT_SECOND, ROAD, TOP_SPEED} from './track.js?v=7';
-import {course, coursePose, roadPosition} from './course.js?v=1';
+import {DRIFT_FIRST, DRIFT_SECOND, ROAD, SEGMENT, TOP_SPEED, roadHeight, track} from './track.js?v=8';
+import {coursePose, roadPosition} from './course.js?v=2';
 
 const zones = {
   pit:   {land:['#5e8261','#557859'], road:['#465368','#424e63'], curb:'#e3674c'},
@@ -20,6 +20,7 @@ function polygon(ctx, color, points) {
   ctx.closePath();
   ctx.fill();
 }
+const course=track.map(segment=>({segment,point:{...coursePose(segment.i*SEGMENT),y:segment.y}}));
 const nearPlane=90;
 const farPlane=8500;
 const views=new WeakMap();
@@ -27,8 +28,8 @@ const angleDelta=(a,b)=>Math.atan2(Math.sin(a-b),Math.cos(a-b));
 
 function viewFor(ctx,race,time) {
   const {width:w,height:h}=ctx.canvas, player=race.player;
-  const position=coursePose(player.distance,player.x);
-  const heading=position.angle+player.steering*.075+player.slide*.11;
+  const position={x:player.worldX,z:player.worldZ,y:roadHeight(player.distance)};
+  const heading=player.heading+player.slide*.10;
   const previous=views.get(race);
   const smoothing=previous?1-Math.exp(-Math.max(0,time-previous.time)*15):1;
   const yaw=previous?previous.yaw+angleDelta(heading,previous.yaw)*smoothing:heading;
@@ -280,9 +281,9 @@ function kart(ctx, x, y, size, driver, time) {
       if(charge>=DRIFT_FIRST) draw(tip,dx+.02,-.079+age*.30,.069,.036);
     }
   }
-  if (driver.chaseBoost>0 || driver.itemBoost>0 || driver.boost>0 || driver.turbo>0) {
+  if (driver.launchBoost>0 || driver.chaseBoost>0 || driver.itemBoost>0 || driver.boost>0 || driver.turbo>0) {
     const ripple = Math.floor(time*23)%3;
-    const flame=driver.chaseBoost>0?'#acf0d6':driver.itemBoost>0||driver.boost>0||driver.turboLevel===2?'#f4a449':'#6ecbff';
+    const flame=driver.launchBoost>0?'#ffdc7e':driver.chaseBoost>0?'#acf0d6':driver.itemBoost>0||driver.boost>0||driver.turboLevel===2?'#f4a449':'#6ecbff';
     draw(flame,-.26,-.03,.14,.17+ripple*.05);
     draw('#f9de9a',.12,-.03,.14,.22-ripple*.035);
   }
@@ -322,6 +323,20 @@ function kart(ctx, x, y, size, driver, time) {
   if(driver.grip>0){
     draw('#adf0a0',-.48,-.15,.17,.09);
     draw('#adf0a0',.31,-.15,.17,.09);
+  }
+  const contactAge=(time-driver.contactAt)/.35;
+  if(contactAge>=0&&contactAge<1){
+    const xOffset=driver.contactSide*size*.48;
+    ctx.save();
+    ctx.globalAlpha=1-contactAge;
+    for(let i=0;i<7;i++){
+      const angle=(i/7)*Math.PI*2;
+      const radius=size*(.10+contactAge*.76);
+      const xx=x+xOffset+Math.cos(angle)*radius;
+      const yy=y-size*.23+Math.sin(angle)*radius*.72;
+      rect(ctx,i%2?'#f7bd62':'#fff0b0',xx,yy,Math.max(1,size*.08),Math.max(1,size*.075));
+    }
+    ctx.restore();
   }
   for(const effect of driver.effects) itemFlash(ctx,x,y,size,effect,time);
 }
@@ -367,7 +382,7 @@ export function drawRace(ctx,race,time) {
     scene.push({depth:at.depth,paint:()=>paint(p)});
   }
   function moving(distance,lane,paint) {
-    objectAt(coursePose(distance,lane),p=>paint(p.x,p.y,Math.min(w*.23,p.scale*105)));
+    objectAt({...coursePose(distance,lane),y:roadHeight(distance)},p=>paint(p.x,p.y,Math.min(w*.23,p.scale*105)));
   }
 
   for(const {segment,point} of course) {
@@ -378,7 +393,9 @@ export function drawRace(ctx,race,time) {
   }
   for(const driver of racers) {
     const distance=driver.finished===null||driver===player?driver.distance:driver.distance+60+driver.id*42;
-    moving(distance,driver.x,(x,y,size)=>kart(ctx,x,y,size,driver,time));
+    if(driver.finished===null||driver===player) {
+      objectAt({x:driver.worldX,z:driver.worldZ,y:roadHeight(driver.distance)},p=>kart(ctx,p.x,p.y,Math.min(w*.23,p.scale*105),driver,time));
+    } else moving(distance,driver.x,(x,y,size)=>kart(ctx,x,y,size,driver,time));
   }
   for(const mark of race.skids) moving(mark.distance,mark.x,(x,y,size)=>skidMarks(ctx,x,y,size,mark,time));
   for(const box of race.boxes) {

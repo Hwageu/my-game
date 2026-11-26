@@ -1,5 +1,5 @@
-import {HAIRPIN_START, HAIRPIN_END, LENGTH, SEGMENT, approachingHairpin} from './track.js?v=7';
-import {mapPose as pose} from './course.js?v=1';
+import {HAIRPIN_START, HAIRPIN_END, LENGTH, SEGMENT, approachingHairpin} from './track.js?v=8';
+import {mapPose as pose} from './course.js?v=2';
 
 const outline=new Path2D();
 for(let i=0;i<=LENGTH/SEGMENT;i++){
@@ -45,8 +45,8 @@ export function drawMinimap(ctx,race) {
     const here=pose(driver.distance), ahead=pose(driver.distance+SEGMENT);
     const heading=Math.atan2(ahead.y-here.y,ahead.x-here.x);
     const lane=driver.x*5;
-    const x=here.x-Math.sin(heading)*lane;
-    const y=here.y+Math.cos(heading)*lane;
+    const x=Math.max(7,Math.min(ctx.canvas.width-7,here.x-Math.sin(heading)*lane));
+    const y=Math.max(8,Math.min(ctx.canvas.height-8,here.y+Math.cos(heading)*lane));
     ctx.beginPath();
     if(driver===race.player){
       ctx.moveTo(x,y-7);ctx.lineTo(x+6,y);ctx.lineTo(x,y+7);ctx.lineTo(x-6,y);ctx.closePath();

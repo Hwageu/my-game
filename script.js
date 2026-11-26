@@ -1015,8 +1015,8 @@ const menuGames = [
     embed:{frame:"fpsFrame", console:"fpsConsole", src:"fps/index.html?v=20261119-mobile", preview:"fps-preview"}},
   {id:"selectCursed", title:"CURSED EDGE", description:"저주를 받아치는 검 · 패링 액션", genre:"PARRY ACTION · 1 PLAYER", ready:true,
     embed:{frame:"cursedFrame", console:"cursedConsole", src:"cursed/index.html?v=20261119-mobile", preview:"cursed-preview"}},
-  {id:"selectKart", title:"TIDELINE GP", description:"인디 힐 서킷에서 다섯 카트를 추월하세요", genre:"KART RACING · 2 LAPS", ready:true,
-    embed:{frame:"kartFrame", console:"kartConsole", src:"kart/index.html?v=7", preview:"kart-preview"}}
+  {id:"selectKart", title:"TIDELINE GP", description:"인디 힐 서킷에서 다섯 카트를 추월하세요", genre:"KART RACING · 3 LAPS", ready:true,
+    embed:{frame:"kartFrame", console:"kartConsole", src:"kart/index.html?v=8", preview:"kart-preview"}}
 ];
 const embeddedGames = menuGames.filter(game => game.embed);
 function selectMenuGame(step) {
