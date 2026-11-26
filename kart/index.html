@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>TIDELINE GP · 인디 힐 서킷</title>
-  <link rel="stylesheet" href="race.css?v=4">
+  <link rel="stylesheet" href="race.css?v=5">
 </head>
 <body>
   <main class="cab" aria-label="타이드라인 그랑프리">
@@ -12,10 +12,14 @@
       <canvas id="road" tabindex="0" aria-label="인디 힐 서킷 경주로">Canvas를 지원하는 브라우저에서 사용할 수 있습니다.</canvas>
       <div class="top">
         <dl class="instruments">
-          <div><dt>순위</dt><dd id="place">5 / 6</dd></div>
-          <div><dt>바퀴</dt><dd id="lap">1 / 2</dd></div>
-          <div><dt>시간</dt><dd id="time">00:00.00</dd></div>
+          <div class="position"><dt>현재 순위</dt><dd><strong id="place">5</strong><span class="place-total">위 / 6대</span></dd></div>
+          <div class="race-metric"><dt>바퀴</dt><dd id="lap">1 / 2</dd></div>
+          <div class="race-metric"><dt>시간</dt><dd id="time">00:00.00</dd></div>
         </dl>
+        <figure id="courseMap" class="course-map" hidden>
+          <canvas id="minimap" width="184" height="119" role="img" aria-label="인디 힐 코스의 카트 위치"></canvas>
+          <figcaption><i class="map-player" aria-hidden="true"></i>내 카트</figcaption>
+        </figure>
         <button type="button" id="pause">일시정지</button>
       </div>
       <div class="item-slot" id="itemSlot">
@@ -48,6 +52,6 @@
       </div>
     </div>
   </main>
-  <script type="module" src="race.js?v=4"></script>
+  <script type="module" src="race.js?v=5"></script>
 </body>
 </html>

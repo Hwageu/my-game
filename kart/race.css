@@ -117,3 +117,44 @@ button:focus-visible {outline:2px solid #ffd885;outline-offset:3px}
   .item-slot,.item-notice {right:6px}
   .touch-bar {gap:6px}
 }
+
+/* Position, race clocks and course plot share the same cabinet palette. */
+.instruments .position {
+  min-width:72px;
+  padding:5px 9px 6px;
+  background:#203d49;
+  border-bottom:2px solid #dfb978;
+}
+.position dd {display:flex;align-items:baseline;gap:3px;margin-top:1px}
+#place {
+  color:#ffdd98;
+  font:900 clamp(29px,5vw,48px)/.88 'Courier New',monospace;
+  font-variant-numeric:tabular-nums;
+}
+.place-total {color:#e2ebde;font:600 11px/1.15 system-ui,sans-serif}
+.instruments .race-metric {align-self:stretch;display:grid;align-content:center}
+.course-map {
+  position:absolute;
+  top:77px;
+  left:12px;
+  width:clamp(108px,17vw,170px);
+  margin:0;
+  padding:3px 5px 5px;
+  background:#17303bef;
+  border:1px solid #83adab;
+  border-radius:3px;
+  pointer-events:none;
+}
+.course-map canvas {display:block;width:100%;height:auto}
+.course-map figcaption {
+  display:flex;align-items:center;gap:6px;padding-inline:4px;
+  color:#f7e6bb;font-size:11px;line-height:1.2;
+}
+.map-player {width:6px;height:6px;background:#ffe096;transform:rotate(45deg)}
+@media(max-width:350px){
+  .instruments .position {min-width:65px;padding-inline:6px}
+  .course-map {left:6px;top:71px}
+}
+@media(orientation:landscape) and (max-height:440px) and (min-width:600px){
+  .course-map {position:static;flex:0 0 112px;width:112px;margin-inline-start:auto}
+}

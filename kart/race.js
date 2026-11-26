@@ -1,9 +1,11 @@
 import {COUNTDOWN, DRIFT_FIRST, DRIFT_SECOND, ITEMS, LAPS, TOP_SPEED, cancelDrift, createRace, order, stepRace} from './track.js?v=4';
 import {drawRace} from './render.js?v=4';
+import {drawMinimap} from './minimap.js?v=1';
 
 const $ = id => document.getElementById(id);
 const canvas = $('road'), context = canvas.getContext('2d');
 const itemButton = $('useItem');
+const courseMap = $('courseMap'), mapContext = $('minimap').getContext('2d');
 let itemQueued = false;
 const controls = [...document.querySelectorAll('[data-drive]')];
 const embedded = parent !== window;
@@ -59,6 +61,8 @@ function report() {
 function setOverlay() {
   const show = ['title','paused','finished'].includes(mode);
   $('overlay').hidden = !show;
+  courseMap.hidden=show;
+  if(!show) drawMinimap(mapContext,race);
   $('pause').disabled = !['playing','countdown'].includes(mode);
   $('touchControls').hidden = !touch || show;
   $('countdown').hidden = mode !== 'countdown';
@@ -242,7 +246,7 @@ window.addEventListener('message',event=>{
 function updateHUD() {
   const place=race.finishPlace??order(race.racers).indexOf(race.player)+1;
   for (const [id,value] of [
-    ['place',place+' / '+race.racers.length],['lap',race.lastLap+' / '+LAPS],
+    ['place',String(place)],['lap',race.lastLap+' / '+LAPS],
     ['time',formatTime(race.player.finished??race.time)],['speed',String(Math.round(race.player.speed/TOP_SPEED*108))],
   ]) if ($(id).textContent!==value) $(id).textContent=value;
   updateItemHUD();
@@ -328,6 +332,7 @@ function frame(now) {
   updateEngine();
   if (paintedRace!==race || paintedTime!==race.time || paintedWidth!==canvas.width || paintedHeight!==canvas.height) {
     drawRace(context,race,race.time);
+    if(!courseMap.hidden) drawMinimap(mapContext,race);
     paintedRace=race;
     paintedTime=race.time;
     paintedWidth=canvas.width;
