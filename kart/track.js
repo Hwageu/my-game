@@ -12,12 +12,15 @@ export const ITEMS = {
   slip: '슬립 패드',
   grip: '그립 타이어',
   pulse: '펄스 링',
+  disc: '코일 디스크',
+  chase: '추격 부스터',
 };
 export const ITEM_CAPACITY = 2;
 export const HAIRPIN_START = 82 * SEGMENT;
 export const HAIRPIN_END = 117 * SEGMENT;
+const CHICANE_FIRST=169, CHICANE_LAST=197;
 const itemTypes = Object.keys(ITEMS);
-const boxRows = [21,167,244];
+const boxRows = [21,73,156,233];
 const boxLanes = [-.75,-.45,-.15,.15,.45,.75];
 const boxRespawn = 4;
 
@@ -31,7 +34,10 @@ const sections = [
   [35, 13.4,  'woods',  95], // Druids Hairpin
   [18,  0,    'woods', -72], // Descent to Graham Hill
   [27, -8.2,  'hill',  -94], // Graham Hill Bend
-  [35,  0,    'hill',  -50], // Cooper Straight
+  [7,   0,    'hill',  -91], // Cooper approach
+  [9, -10.9,  'hill',  -79], // Ridge chicane entry
+  [10, 13.4,  'hill',  -58], // Ridge chicane apex
+  [9, -10.1,  'hill',  -50], // Ridge chicane exit
   [21, -7.0,  'woods',  40], // Surtees
   [18,  8.1,  'woods',  68], // McLaren
   [25,  2.6,  'hill',   48], // Clearways
@@ -41,7 +47,7 @@ const sections = [
 const segmentCount = sections.reduce((sum, [length]) => sum + length, 0);
 export const LENGTH = segmentCount * SEGMENT;
 const boosts = [{segment:176, lane:-.41}, {segment:251, lane:.52}];
-const signs = new Map([[27,1],[72,2],[78,2],[128,-1],[189,-1],[211,1],[253,1]]);
+const signs = new Map([[27,1],[72,2],[78,2],[128,-1],[160,-1],[166,-1],[189,-1],[211,1],[253,1]]);
 const limit = (value, low, high) => Math.max(low, Math.min(high, value));
 const mod = (value, size) => (value % size + size) % size;
 const smooth = value => value * value * (3 - 2 * value);
@@ -51,11 +57,16 @@ let entryHeight = sections.at(-1)[3];
 for (const [length, turn, zone, exitHeight] of sections) {
   for (let n = 0; n < length; n++) {
     const i = track.length;
-    const edge = smooth(Math.min(1, n / 5, (length - n) / 5));
+    const ramp=length<12?2.75:5;
+    const edge=smooth(Math.min(1,n/ramp,(length-n)/ramp));
+    const chicane=i>=CHICANE_FIRST&&i<CHICANE_LAST;
+    const hairpin=i*SEGMENT>=HAIRPIN_START&&i*SEGMENT<HAIRPIN_END;
+    const width=chicane?1-.23*smooth(Math.min(1,(i-CHICANE_FIRST)/5,(CHICANE_LAST-i)/5)):
+      hairpin?1-.14*smooth(Math.min(1,n/8,(length-n)/8)):1;
     track.push({
       i, curve: turn * edge, zone, y: entryHeight+(exitHeight-entryHeight)*smooth(n/length),
       boost: boosts.find(pad => i >= pad.segment && i < pad.segment + 3)?.lane,
-      sign: signs.get(i), hairpin:i*SEGMENT>=HAIRPIN_START&&i*SEGMENT<HAIRPIN_END,
+      sign:signs.get(i),hairpin,chicane,width,
     });
   }
   entryHeight=exitHeight;
@@ -97,11 +108,11 @@ export function createRace(random=Math.random) {
     id, name, color, light, shade, x: grid[id][0], distance: grid[id][1],
     speed:0, steering:0, boost:0, turbo:0, turboLevel:0, driftSide:0, driftCharge:0,
     hit:0, lane:grid[id][0], finished:null,
-    items:[], lastBox:null, effects:[], itemBoost:0, shield:0, slow:0, grip:0,
+    items:[], lastBox:null, effects:[], itemBoost:0, chaseBoost:0, shield:0, slow:0, grip:0,
     slide:0, nextSkid:0,
   }));
   const boxes=boxRows.flatMap(segment=>boxLanes.map(x=>({x,distance:segment*SEGMENT+SEGMENT/2,readyAt:0})));
-  return {time:0,racers,player:racers[0],lastLap:1,finishPlace:null,random,boxes,traps:[],skids:[],itemEvent:null};
+  return {time:0,racers,player:racers[0],lastLap:1,finishPlace:null,random,boxes,traps:[],discs:[],skids:[],itemEvent:null};
 }
 
 export function lapAt(distance) {
@@ -130,9 +141,63 @@ function nearby(race,racer) {
     Math.hypot(raceGap(racer.distance,other.distance)/310,(racer.x-other.x)/.92)<=1);
 }
 
+// The same position-based draw applies to every racer.
+const itemWeights=[
+  [1,3,4,2,1,2,0],
+  [2,2,2,2,2,4,1],
+  [3,1,1,2,1,4,5],
+];
+function rollItem(race,racer) {
+  const place=order(race.racers).indexOf(racer);
+  const weights=itemWeights[Math.floor(place/2)];
+  let roll=race.random()*weights.reduce((sum,weight)=>sum+weight,0);
+  for(const [index,weight] of weights.entries()) {
+    roll-=weight;
+    if(roll<0) return itemTypes[index];
+  }
+  return itemTypes.at(-1);
+}
+
+function frontTarget(race,distance,x,owner,range) {
+  let target=null,closest=range;
+  for(const other of race.racers) {
+    if(other.id===owner||other.finished!==null||Math.abs(other.x-x)>.92) continue;
+    const gap=raceGap(distance,other.distance);
+    if(gap>0&&gap<closest) {closest=gap;target=other;}
+  }
+  return target;
+}
+
+function stepDiscs(race,dt,moves) {
+  const travel=1900*dt;
+  race.discs=race.discs.filter(disc=>{
+    if(disc.expiresAt<=race.time) return false;
+    const target=frontTarget(race,disc.distance,disc.x,disc.owner,1200);
+    const previousX=disc.x;
+    if(target) disc.x+=limit(target.x-disc.x,-.74*dt,.74*dt);
+    let hit=null, first=Infinity;
+    for(const {racer,from,to,startX} of moves) {
+      if(racer.id===disc.owner) continue;
+      const gap=raceGap(disc.distance,from);
+      const closing=travel-(to-from);
+      if(closing<=0||gap<-18||gap-closing>18) continue;
+      const t=limit(gap/closing,0,1);
+      const x=previousX+(disc.x-previousX)*t, otherX=startX+(racer.x-startX)*t;
+      if(t<first&&Math.abs(x-otherX)<.24){first=t;hit=racer;}
+    }
+    if(hit) {
+      if(!preventHit(race,hit)) slowKart(race,hit,'disc');
+      return false;
+    }
+    disc.distance+=travel;
+    return true;
+  });
+}
+
 function slowKart(race,racer,item) {
-  racer.speed*=item==='pulse'?.83:.78;
-  racer.slow=Math.max(racer.slow,item==='pulse'?.72:1);
+  const [factor,seconds]=item==='pulse'?[.83,.72]:item==='disc'?[.71,1.13]:[.78,1];
+  racer.speed*=factor;
+  racer.slow=Math.max(racer.slow,seconds);
   cancelDrift(racer);
   itemEvent(race,racer,'slipped',item);
 }
@@ -141,6 +206,8 @@ function useItem(race,racer) {
   const item=racer.items.shift()?.type;
   if(!item) return;
   if(item==='boost') racer.itemBoost=1.10;
+  if(item==='chase') racer.chaseBoost=1.85;
+  if(item==='disc') race.discs.push({owner:racer.id,x:racer.x,distance:racer.distance+94,expiresAt:race.time+2.35});
   if(item==='shield') racer.shield=4.5;
   if(item==='grip') racer.grip=2.4;
   if(item==='slip') race.traps.push({owner:racer.id,x:racer.x,distance:racer.distance-78,armedAt:race.time+.22,expiresAt:race.time+16});
@@ -156,6 +223,8 @@ function aiItem(race,racer,curve,traffic) {
   const longHold=race.time-held.time>(racer.items.length===ITEM_CAPACITY?3.4:5);
   if(held.type==='boost') return Math.abs(racer.x)<.82&&racer.speed>550&&
     (longHold||(!racer.boost&&!racer.turbo&&curve<5));
+  if(held.type==='chase') return racer.speed>450&&(longHold||curve<6);
+  if(held.type==='disc') return longHold||frontTarget(race,racer.distance,racer.x,racer.id,1150)!==null;
   if(held.type==='shield') return longHold||traffic.some(({gap})=>Math.abs(gap)<155);
   if(held.type==='grip') return longHold||curve>7.5||Math.abs(racer.x)>.92;
   if(held.type==='pulse') return longHold||nearby(race,racer).length>0;
@@ -197,7 +266,7 @@ function resolveItems(race,moves) {
     if(kind==='box') {
       if(racer.items.length>=ITEM_CAPACITY||racer.lastBox===crossing||object.readyAt>race.time) continue;
       object.readyAt=race.time+boxRespawn;
-      const item=itemTypes[Math.floor(race.random()*itemTypes.length)];
+      const item=rollItem(race,racer);
       racer.lastBox=crossing;
       racer.items.push({type:item,time:race.time});
       itemEvent(race,racer,'picked',item);
@@ -276,6 +345,7 @@ function steerRate(ratio,brake,drifting) {
 }
 
 function boostedSpeed(racer) {
+  if(racer.chaseBoost>0) return 1740;
   if(racer.itemBoost>0) return 1610;
   if(racer.boost>0) return 1580;
   if(racer.turbo>0) return racer.turboLevel===2?1560:1450;
@@ -311,6 +381,7 @@ function drive(racer, dt, input) {
   const here = segmentAt(racer.distance);
   racer.hit = Math.max(0,racer.hit - dt);
   racer.itemBoost=Math.max(0,racer.itemBoost-dt);
+  racer.chaseBoost=Math.max(0,racer.chaseBoost-dt);
   racer.shield=Math.max(0,racer.shield-dt);
   racer.slow=Math.max(0,racer.slow-dt);
   racer.grip=Math.max(0,racer.grip-dt);
@@ -319,7 +390,7 @@ function drive(racer, dt, input) {
   if (here.boost !== undefined && Math.abs(racer.x - here.boost) < .24 && racer.speed > 420) racer.boost = .76;
 
   const ratio = racer.speed / TOP_SPEED;
-  const offRoad = Math.abs(racer.x) > 1.04;
+  const offRoad=Math.abs(racer.x)>here.width+.035;
   const grippy=racer.grip>0;
   updateDrift(racer,input,here,offRoad&&!grippy,dt);
   racer.slide+=(racer.driftSide-racer.slide)*Math.min(1,dt*8);
@@ -363,6 +434,7 @@ export function stepRace(race, dt, input) {
     moves.push({racer,from,to:racer.distance,startX,speed:racer.speed});
   }
   resolveItems(race,moves);
+  stepDiscs(race,dt,moves);
   for(const {racer,from,speed} of moves) {
     if (racer.distance >= finishLine) {
       racer.finished = race.time - dt + (finishLine-from)/Math.max(1,speed);

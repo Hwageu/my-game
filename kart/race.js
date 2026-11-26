@@ -1,7 +1,7 @@
-import {COUNTDOWN, DRIFT_FIRST, DRIFT_SECOND, ITEMS, ITEM_CAPACITY, LAPS, TOP_SPEED, approachingHairpin, cancelDrift, createRace, order, stepRace} from './track.js?v=6';
-import {drawRace} from './render.js?v=6';
-import {drawMinimap} from './minimap.js?v=2';
-import {createRaceAudio} from './audio.js?v=1';
+import {COUNTDOWN, DRIFT_FIRST, DRIFT_SECOND, ITEMS, ITEM_CAPACITY, LAPS, TOP_SPEED, approachingHairpin, cancelDrift, createRace, order, segmentAt, stepRace} from './track.js?v=7';
+import {drawRace} from './render.js?v=7';
+import {drawMinimap} from './minimap.js?v=3';
+import {createRaceAudio} from './audio.js?v=2';
 
 const $ = id => document.getElementById(id);
 const canvas = $('road'), context = canvas.getContext('2d');
@@ -223,10 +223,14 @@ function updateHUD() {
     ['time',formatTime(race.player.finished??race.time)],['speed',String(Math.round(race.player.speed/TOP_SPEED*108))],
   ]) if ($(id).textContent!==value) $(id).textContent=value;
   updateItemHUD();
-  $('turnHint').hidden=mode!=='playing'||!approachingHairpin(race.player.distance);
-  const {boost,turbo,itemBoost,driftSide,driftCharge}=race.player;
-  $('boost').hidden=itemBoost<=0&&boost<=0&&turbo<=0;
-  const boostLabel=itemBoost>0?'터보 캔':boost>0?'BOOST':'미니터보';
+  const distance=race.player.distance;
+  const turn=approachingHairpin(distance)?'U자 우회전':segmentAt(distance).chicane||segmentAt(distance+1000).chicane?'S자 급커브':'';
+  const turnHint=$('turnHint');
+  turnHint.hidden=mode!=='playing'||!turn;
+  if(turnHint.textContent!==turn) turnHint.textContent=turn;
+  const {boost,turbo,itemBoost,chaseBoost,driftSide,driftCharge}=race.player;
+  $('boost').hidden=chaseBoost<=0&&itemBoost<=0&&boost<=0&&turbo<=0;
+  const boostLabel=chaseBoost>0?'추격 부스터':itemBoost>0?'터보 캔':boost>0?'BOOST':'미니터보';
   if($('boost').textContent!==boostLabel) $('boost').textContent=boostLabel;
   const tier=driftCharge>=DRIFT_SECOND?2:driftCharge>=DRIFT_FIRST?1:0;
   const driftLabel=tier===2?'강한 미니터보':tier===1?'미니터보 준비':'드리프트';
@@ -253,7 +257,7 @@ function updateItemHUD() {
   notice.hidden=!event||event.until<=race.time||mode!=='playing';
   if(!notice.hidden) {
     const name=ITEMS[event.item];
-    const messages={picked:name+' 획득',used:name+' 사용',blocked:'실드로 충격 방어',slipped:event.item==='pulse'?'펄스에 밀림':'슬립 패드에 미끄러짐'};
+    const messages={picked:name+' 획득',used:name+' 사용',blocked:'실드로 충격 방어',slipped:event.item==='pulse'?'펄스에 밀림':event.item==='disc'?'코일 디스크 피격':'슬립 패드에 미끄러짐'};
     if(notice.textContent!==messages[event.type]) notice.textContent=messages[event.type];
   }
 }

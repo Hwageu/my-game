@@ -1,6 +1,6 @@
-import {DRIFT_FIRST, DRIFT_SECOND, LENGTH, ROAD, SEGMENT, TOP_SPEED, roadHeight, segmentAt} from './track.js?v=6';
+import {DRIFT_FIRST, DRIFT_SECOND, ROAD, TOP_SPEED} from './track.js?v=7';
+import {course, coursePose, roadPosition} from './course.js?v=1';
 
-const fog = '#a8ddd4';
 const zones = {
   pit:   {land:['#5e8261','#557859'], road:['#465368','#424e63'], curb:'#e3674c'},
   hill:  {land:['#6e935d','#638858'], road:['#4c5469','#485066'], curb:'#d65c4b'},
@@ -20,60 +20,127 @@ function polygon(ctx, color, points) {
   ctx.closePath();
   ctx.fill();
 }
-function strip(ctx, color, near, far, inner, outer) {
-  polygon(ctx,color,[
-    [near.x+near.width*inner,near.y],[near.x+near.width*outer,near.y],
-    [far.x+far.width*outer,far.y],[far.x+far.width*inner,far.y],
-  ]);
+const nearPlane=90;
+const farPlane=8500;
+const views=new WeakMap();
+const angleDelta=(a,b)=>Math.atan2(Math.sin(a-b),Math.cos(a-b));
+
+function viewFor(ctx,race,time) {
+  const {width:w,height:h}=ctx.canvas, player=race.player;
+  const position=coursePose(player.distance,player.x);
+  const heading=position.angle+player.steering*.075+player.slide*.11;
+  const previous=views.get(race);
+  const smoothing=previous?1-Math.exp(-Math.max(0,time-previous.time)*15):1;
+  const yaw=previous?previous.yaw+angleDelta(heading,previous.yaw)*smoothing:heading;
+  views.set(race,{yaw,time});
+  const forwardX=Math.cos(yaw),forwardZ=Math.sin(yaw);
+  const rightX=-forwardZ,rightZ=forwardX;
+  const focal=w*.44, horizon=h*.35;
+  const follow=490+Math.min(1,Math.max(0,player.speed/TOP_SPEED-1)*4)*32;
+  const slide=player.x*118+player.slide*76;
+  return {
+    w,h,yaw,horizon,focal,forwardX,forwardZ,rightX,rightZ,
+    x:position.x-forwardX*follow-rightX*slide,
+    z:position.z-forwardZ*follow-rightZ*slide,
+    y:position.y+(h*.82-horizon)*follow/focal,
+  };
 }
 
-function sky(ctx,w,h,horizon,turn) {
+function local(point,view) {
+  const dx=point.x-view.x,dz=point.z-view.z;
+  return {x:dx*view.rightX+dz*view.rightZ,depth:dx*view.forwardX+dz*view.forwardZ,y:view.y-point.y};
+}
+
+function screen(point,view) {
+  const scale=view.focal/point.depth;
+  return {x:view.w/2+point.x*scale,y:view.horizon+point.y*scale,scale,width:ROAD*scale,depth:point.depth};
+}
+
+function crossSection(point,view) {
+  const origin=local(point,view);
+  const lateral=(point.rightX*view.rightX+point.rightZ*view.rightZ)*ROAD;
+  const depth=(point.rightX*view.forwardX+point.rightZ*view.forwardZ)*ROAD;
+  return lane=>({x:origin.x+lateral*lane,y:origin.y,depth:origin.depth+depth*lane});
+}
+
+function strip(ctx, color, near, far, view, left, right, nextLeft=left, nextRight=right, seal=false) {
+  const vertices=[near(left),near(right),far(nextRight),far(nextLeft)];
+  const clipped=[];
+  for(let i=0;i<vertices.length;i++){
+    const a=vertices[i],b=vertices[(i+1)%vertices.length];
+    if(a.depth>=nearPlane) clipped.push(a);
+    if((a.depth>=nearPlane)!==(b.depth>=nearPlane)){
+      const t=(nearPlane-a.depth)/(b.depth-a.depth);
+      clipped.push({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t,depth:nearPlane});
+    }
+  }
+  if(clipped.length<3) return;
+  const xy=clipped.map(p=>screen(p,view));
+  if(xy.every(p=>p.x<0)||xy.every(p=>p.x>view.w)||xy.every(p=>p.y>view.h)) return;
+  polygon(ctx,color,xy.map(p=>[p.x,p.y]));
+  if(seal) {ctx.strokeStyle=color;ctx.lineWidth=.8;ctx.stroke();}
+}
+
+function roadBand(ctx,view,entry,exit,terrain) {
+  const {segment}=entry, near=crossSection(entry.point,view),far=crossSection(exit.point,view);
+  const palette=zones[segment.zone], group=Math.floor(segment.i/3)%2;
+  const w=segment.width, e=exit.segment.width;
+  const band=(color,left,right,nextLeft=left,nextRight=right,seal=false)=>
+    strip(ctx,color,near,far,view,left,right,nextLeft,nextRight,seal);
+  if(terrain) {
+    const land=palette.land[group];
+    band(land,-1.85,-w,-1.85,-e);
+    band(land,w,1.85,e,1.85);
+    if(segment.zone==='pit') band(group?'#667b7a':'#718482',-1.45,-w-.09,-1.45,-e-.09);
+    if(segment.hairpin||segment.chicane||Math.abs(segment.curve)>5.5) {
+      const side=-Math.sign(segment.curve||1);
+      band(group?'#ad946d':'#c5a977',(w+.12)*side,1.60*side,(e+.12)*side,1.60*side);
+    }
+    return;
+  }
+  const curb=(segment.chicane||segment.hairpin) ? .15 : .10;
+  const curbColor=group?'#f1d8aa':palette.curb;
+  band(curbColor,-w-curb,-w,-e-curb,-e);
+  band(curbColor,w,w+curb,e,e+curb);
+  band(palette.road[group],-w,w,-e,e,true);
+  if(segment.i%8<3) band('#a6a79d',-.012,.012);
+
+  if(segment.boost!==undefined) {
+    const lane=segment.boost;
+    band(group?'#dd853e':'#f2ac52',lane-.20,lane+.20);
+    if(segment.i%2===0) band('#fbe1a0',lane-.15,lane+.15);
+  }
+  if(segment.i<2) for(let i=0;i<12;i++) {
+    band((i+segment.i)%2?'#d6d9bc':'#303d4b',-1+i/6,-1+(i+1)/6);
+  }
+}
+
+const skyline=[
+  [-2.86,.20,.32],[-2.28,.29,.44],[-1.61,.25,.22],[-.83,.22,.34],
+  [-.3,.25,.49],[.35,.24,.29],[.91,.30,.46],[1.61,.33,.37],[2.46,.26,.50],
+];
+function sky(ctx,view) {
+  const {w,h,horizon,yaw,focal}=view;
   rect(ctx,'#93c9ce',0,0,w,horizon);
   rect(ctx,'#a7d7d4',0,horizon*.49,w,horizon*.51);
   rect(ctx,'#badfd4',0,horizon*.77,w,horizon*.23);
-  const sunX = w*.79 - turn*.55, sunY = horizon*.42;
-  rect(ctx,'#fbe6ac',sunX-10,sunY-15,20,30);
-  rect(ctx,'#fbe6ac',sunX-14,sunY-10,28,20);
-  for (const [x,y,size] of [[.12,.34,36],[.43,.56,42],[.93,.25,21]]) {
-    rect(ctx,'#d8e8d9',w*x+turn*.62,y*horizon,size,5);
-    rect(ctx,'#d8e8d9',w*x+turn*.62+8,y*horizon-4,size*.58,4);
+  const sun=angleDelta(-2.15,yaw);
+  if(Math.abs(sun)<1.35) {
+    const x=w/2+Math.tan(sun)*focal, y=horizon*.40;
+    rect(ctx,'#fbe6ac',x-11,y-15,22,30);
+    rect(ctx,'#fbe6ac',x-15,y-10,30,20);
   }
-  for (let i=-1;i<4;i++) {
-    const x = i*w*.49 + turn;
-    polygon(ctx,'#7eb6b5',[[x-25,horizon+3],[x+w*.12,horizon*.77],[x+w*.23,horizon*.59],[x+w*.31,horizon*.76],[x+w*.53,horizon+3]]);
-    polygon(ctx,'#679fa9',[[x+4,horizon+3],[x+w*.14,horizon*.87],[x+w*.21,horizon*.71],[x+w*.33,horizon*.88],[x+w*.46,horizon+3]]);
-  }
+  skyline.forEach(([bearing,width,elevation],index)=>{
+    const angle=angleDelta(bearing,yaw);
+    if(Math.abs(angle)>1.39) return;
+    const x=w/2+Math.tan(angle)*focal, spread=width*w;
+    polygon(ctx,index%2?'#679fa9':'#7eb6b5',[[x-spread,horizon+6],[x-spread*.5,horizon*(1-elevation*.47)],[x,horizon*(1-elevation)],
+      [x+spread*.40,horizon*(1-elevation*.45)],[x+spread,horizon+6]]);
+    if(index%2===0) rect(ctx,'#d8e8d9',x+16,horizon*(.22+elevation*.4),w*.09,4);
+  });
   rect(ctx,'#638858',0,horizon,w,h-horizon);
 }
 
-function roadBand(ctx,w,near,far,segment) {
-  if (Math.round(near.y) <= Math.round(far.y) || far.y >= ctx.canvas.height) return;
-  const palette = zones[segment.zone];
-  const group = Math.floor(segment.i/3) % 2;
-  rect(ctx,palette.land[group],0,far.y,w,near.y-far.y+1);
-  if (segment.zone === 'pit') strip(ctx,group?'#667b7a':'#718482',near,far,-1.46,-1.10);
-  if (Math.abs(segment.curve)>5.5) {
-    const outside=-Math.sign(segment.curve);
-    strip(ctx,group?'#bb9e70':'#cdb082',near,far,1.10*outside,1.82*outside);
-  }
-  const curb=segment.hairpin?1.16:1.10;
-  strip(ctx,group?'#f1d8aa':palette.curb,near,far,-curb,-1);
-  strip(ctx,group?'#f1d8aa':palette.curb,near,far,1,curb);
-  strip(ctx,palette.road[group],near,far,-1,1);
-  strip(ctx,'#aba9a3',near,far,-.98,-.953);
-  strip(ctx,'#aba9a3',near,far,.953,.98);
-  if (segment.i%8<3) strip(ctx,'#b9b0a2',near,far,-.012,.012);
-  if (segment.boost !== undefined) {
-    const lane = segment.boost;
-    strip(ctx,group?'#dd853e':'#f2ac52',near,far,lane-.205,lane+.205);
-    if (segment.i%2===0) strip(ctx,'#fbe1a0',near,far,lane-.15,lane+.15);
-  }
-  if (segment.i<2) {
-    for (let n=0;n<12;n++) {
-      strip(ctx,(n+segment.i)%2?'#d6d9bc':'#303d4b',near,far,-1+n/6,-1+(n+1)/6);
-    }
-  }
-}
 function scenery(ctx,segment,point,side) {
   const x = point.x+point.width*side, y = point.y;
   const size = Math.min(42,point.width*.19);
@@ -99,7 +166,7 @@ function scenery(ctx,segment,point,side) {
 function turnSign(ctx, point, direction) {
   const size = Math.min(33,point.width*.19);
   if (size<3) return;
-  const x=point.x-point.width*1.32*Math.sign(direction), y=point.y-size*.75;
+  const x=point.x, y=point.y-size*.75;
   rect(ctx,'#4b5152',x-size*.05,y,size*.10,size*.76);
   rect(ctx,'#333f48',x-size*.50,y-size*.48,size,size*.49);
   if(direction===2) {
@@ -154,7 +221,7 @@ function skidMarks(ctx,x,y,size,mark,time) {
   ctx.restore();
 }
 
-const itemColors={boost:'#ffba57',shield:'#a1efe1',slip:'#deb1f2',grip:'#adf0a0',pulse:'#8bd8ff'};
+const itemColors={boost:'#ffba57',shield:'#a1efe1',slip:'#deb1f2',grip:'#adf0a0',pulse:'#8bd8ff',disc:'#a1f0ed',chase:'#abf6df'};
 function itemFlash(ctx,x,y,size,event,time) {
   const elapsed=time-event.time;
   if(elapsed<0||elapsed>.62||size<2) return;
@@ -213,9 +280,9 @@ function kart(ctx, x, y, size, driver, time) {
       if(charge>=DRIFT_FIRST) draw(tip,dx+.02,-.079+age*.30,.069,.036);
     }
   }
-  if (driver.itemBoost>0 || driver.boost>0 || driver.turbo>0) {
+  if (driver.chaseBoost>0 || driver.itemBoost>0 || driver.boost>0 || driver.turbo>0) {
     const ripple = Math.floor(time*23)%3;
-    const flame=driver.itemBoost>0||driver.boost>0||driver.turboLevel===2?'#f4a449':'#6ecbff';
+    const flame=driver.chaseBoost>0?'#acf0d6':driver.itemBoost>0||driver.boost>0||driver.turboLevel===2?'#f4a449':'#6ecbff';
     draw(flame,-.26,-.03,.14,.17+ripple*.05);
     draw('#f9de9a',.12,-.03,.14,.22-ripple*.035);
   }
@@ -259,90 +326,77 @@ function kart(ctx, x, y, size, driver, time) {
   for(const effect of driver.effects) itemFlash(ctx,x,y,size,effect,time);
 }
 
+function tower(ctx,p) {
+  const size=Math.min(110,p.scale*435);
+  if(size<3) return;
+  const {x,y}=p;
+  rect(ctx,'#334e50',x-size*.20,y-size*.82,size*.40,size*.82);
+  rect(ctx,'#6e8a74',x-size*.13,y-size*.76,size*.26,size*.66);
+  rect(ctx,'#2f434b',x-size*.32,y-size*1.06,size*.64,size*.31);
+  rect(ctx,'#f1c979',x-size*.27,y-size*1.02,size*.54,size*.10);
+  for(const column of [-.18,.03]) rect(ctx,'#709a99',x+size*column,y-size*.88,size*.13,size*.09);
+  rect(ctx,'#465f56',x-size*.43,y-size*.050,size*.86,size*.075);
+}
+
+function coilDisc(ctx,x,y,size,time) {
+  const flash=Math.floor(time*22)%2?'#a4e8f0':'#e3f2bb';
+  rect(ctx,'#293c49',x-size*.28,y-size*.07,size*.56,size*.12);
+  rect(ctx,'#65a9a5',x-size*.22,y-size*.32,size*.44,size*.21);
+  rect(ctx,flash,x-size*.13,y-size*.28,size*.26,size*.10);
+}
+
 export function drawRace(ctx,race,time) {
-  const {width:w,height:h}=ctx.canvas;
-  const {player,racers}=race;
-  const horizon = h*.35;
-  const scale = w*.39;
-  const follow = 456 + Math.min(1,Math.max(0,player.speed/TOP_SPEED-1)*4)*32;
-  const eye = (h*.83-horizon)*follow/scale;
-  const cameraZ = player.distance-follow;
-  const cameraY = roadHeight(player.distance) + eye;
-  const base = Math.floor(cameraZ/SEGMENT)*SEGMENT;
-  const progress = (player.distance-base)/SEGMENT;
-  const points = [];
-  let center=0, angle=0;
-  for (let i=0;i<=100;i++) {
-    const segment = segmentAt(base+i*SEGMENT);
-    points.push({segment, center, depth:base+i*SEGMENT-cameraZ});
-    center += angle;
-    angle+=segment.curve*(segment.hairpin?1.48:1.26);
+  const view=viewFor(ctx,race,time), {w,h}=view, {player,racers}=race;
+  sky(ctx,view);
+  const scene=[],roadLayers=[];
+  const centers=course.map(({point})=>local(point,view));
+  for(let i=0;i<course.length;i++) {
+    const j=(i+1)%course.length, a=centers[i], b=centers[j];
+    const maxDepth=Math.max(a.depth,b.depth), verge=ROAD*1.85;
+    const sideLimit=Math.max(nearPlane,maxDepth)*w/(view.focal*2)+verge;
+    if(maxDepth<=nearPlane-verge||Math.min(a.depth,b.depth)>=farPlane||
+       (a.x<-sideLimit&&b.x<-sideLimit)||(a.x>sideLimit&&b.x>sideLimit)) continue;
+    const depth=(a.depth+b.depth)/2,entry=course[i],exit=course[j];
+    roadLayers.push({depth,entry,exit});
   }
-  const ahead = Math.floor(progress);
-  const centerAtPlayer = points[ahead].center+(points[ahead+1].center-points[ahead].center)*(progress-ahead);
-  const cameraX=centerAtPlayer+player.x*ROAD*.74+player.slide*67;
-  for (const point of points) {
-    const depth = Math.max(20,point.depth);
-    point.scale=scale/depth;
-    point.x=w/2+(point.center-cameraX)*point.scale;
-    point.y=horizon+(cameraY-point.segment.y)*point.scale;
-    point.width=ROAD*point.scale;
+  function objectAt(point,paint) {
+    const at=local(point,view);
+    if(at.depth<nearPlane||at.depth>farPlane) return;
+    const p=screen(at,view);
+    if(p.x<-p.width*2||p.x>w+p.width*2||p.y>h+p.width||p.y<-p.width) return;
+    scene.push({depth:at.depth,paint:()=>paint(p)});
+  }
+  function moving(distance,lane,paint) {
+    objectAt(coursePose(distance,lane),p=>paint(p.x,p.y,Math.min(w*.23,p.scale*105)));
   }
 
-  sky(ctx,w,h,horizon,-player.x*13-player.slide*10-segmentAt(player.distance+650).curve*1.5);
-  const buckets = new Map();
-  function place(object,distance) {
-    const depth=((distance-cameraZ)%LENGTH+LENGTH)%LENGTH;
-    if(depth<55||depth>=99*SEGMENT) return;
-    const i=Math.floor((depth+cameraZ-base)/SEGMENT);
-    const list=buckets.get(i)||[];
-    list.push({...object,depth});
-    buckets.set(i,list);
+  for(const {segment,point} of course) {
+    if(segment.i%7===3) objectAt(roadPosition(point,segment.zone==='woods'?-1.65:1.55),p=>scenery(ctx,segment,p,0));
+    if(segment.i%13===7) objectAt(roadPosition(point,-1.65),p=>scenery(ctx,segment,p,0));
+    if(segment.sign) objectAt(roadPosition(point,-1.36*Math.sign(segment.sign)),p=>turnSign(ctx,p,segment.sign));
+    if(segment.i===95||segment.i===184) objectAt(roadPosition(point,2.3),p=>tower(ctx,p));
   }
-  for (const driver of racers) {
+  for(const driver of racers) {
     const distance=driver.finished===null||driver===player?driver.distance:driver.distance+60+driver.id*42;
-    place({kind:'kart',x:driver.x,driver},distance);
+    moving(distance,driver.x,(x,y,size)=>kart(ctx,x,y,size,driver,time));
   }
-  for(const mark of race.skids) place({kind:'skid',x:mark.x,mark},mark.distance);
+  for(const mark of race.skids) moving(mark.distance,mark.x,(x,y,size)=>skidMarks(ctx,x,y,size,mark,time));
   for(const box of race.boxes) {
-    if(box.readyAt<=time) place({kind:'box',x:box.x},box.distance);
+    if(box.readyAt<=time) moving(box.distance,box.x,(x,y,size)=>{if(size>=2)itemBox(ctx,x,y,size*.78,time);});
   }
   for(const trap of race.traps) {
-    if(trap.armedAt<=time) place({kind:'trap',x:trap.x},trap.distance);
+    if(trap.armedAt<=time) moving(trap.distance,trap.x,(x,y,size)=>{if(size>=2)slipPad(ctx,x,y,size);});
   }
+  for(const disc of race.discs) moving(disc.distance,disc.x,(x,y,size)=>{if(size>=2)coilDisc(ctx,x,y,size,time);});
+  roadLayers.sort((a,b)=>b.depth-a.depth);
+  for(const {entry,exit} of roadLayers) roadBand(ctx,view,entry,exit,true);
+  for(const {entry,exit} of roadLayers) roadBand(ctx,view,entry,exit,false);
+  scene.sort((a,b)=>b.depth-a.depth);
+  for(const {paint} of scene) paint();
 
-  for (let i=points.length-2;i>=0;i--) {
-    const near = points[i],far = points[i+1],segment=near.segment;
-    roadBand(ctx,w,near,far,segment);
-    if (near.depth > 90 && segment.i%7===3) scenery(ctx,segment,near,segment.zone==='woods'?-1.57:1.50);
-    if (near.depth>90 && segment.i%13===7) scenery(ctx,segment,near,-1.65);
-    if (near.depth>90 && segment.sign) turnSign(ctx,near,segment.sign);
-    if (near.depth>390 && segment.i===1) {
-      const height=near.width*.47;
-      rect(ctx,'#364755',near.x-near.width*1.12,near.y-height,near.width*.065,height);
-      rect(ctx,'#364755',near.x+near.width*1.055,near.y-height,near.width*.065,height);
-      rect(ctx,'#45586a',near.x-near.width*1.12,near.y-height,near.width*2.24,height*.29);
-      for(let n=0;n<12;n++) rect(ctx,n%2?fog:'#a6524b',near.x-near.width*1.05+near.width*.175*n,near.y-height*.95,near.width*.15,height*.16);
-    }
-    const list=buckets.get(i);
-    if (!list) continue;
-    for (const {kind,x,driver,mark,depth} of list.sort((a,b)=>b.depth-a.depth)) {
-      const amount=(depth-near.depth)/SEGMENT;
-      const relativeX=near.center+(far.center-near.center)*amount-cameraX;
-      const ground=near.segment.y+(far.segment.y-near.segment.y)*amount;
-      const s=scale/depth;
-      const screenX=w/2+(relativeX+x*ROAD)*s;
-      const screenY=horizon+(cameraY-ground)*s;
-      const size=Math.min(w*.22,s*105);
-      if(kind==='skid') skidMarks(ctx,screenX,screenY,size,mark,time);
-      if(kind==='kart') kart(ctx,screenX,screenY,size,driver,time);
-      if(kind==='box'&&size>=2) itemBox(ctx,screenX,screenY,size*.78,time);
-      if(kind==='trap'&&size>=2) slipPad(ctx,screenX,screenY,size);
-    }
-  }
   if(player.speed>TOP_SPEED*1.04){
-    const flicker = Math.floor(time*30)%4;
-    const color=player.itemBoost>0||player.boost>0||player.turboLevel===2?'#f5d49b':'#a7dcf2';
+    const flicker=Math.floor(time*30)%4;
+    const color=player.chaseBoost>0?'#abf6df':player.itemBoost>0||player.boost>0||player.turboLevel===2?'#f5d49b':'#a7dcf2';
     polygon(ctx,color,[[w*.13,h*.77+flicker*4],[w*.15,h*.74+flicker*4],[w*.17,h*.715+flicker*4]]);
     polygon(ctx,color,[[w*.90,h*.73+flicker*4],[w*.875,h*.695+flicker*4],[w*.86,h*.69+flicker*4]]);
     rect(ctx,color,w*.07,h*.88+flicker*3,2,7);

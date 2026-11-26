@@ -1,30 +1,5 @@
-import {HAIRPIN_START, HAIRPIN_END, LENGTH, SEGMENT, approachingHairpin} from './track.js?v=6';
-
-// A schematic of Indy Hill: each point is tied to a driving segment.
-const route = [
-  [0,94,95], [18,72,105], [35,46,108], [51,20,98],
-  [64,12,72], [82,14,39], [96,29,25], [111,43,36],
-  [117,44,53], [135,49,72], [149,61,82], [162,80,80],
-  [184,104,72], [197,120,63], [208,129,55], [223,134,42],
-  [236,138,27], [249,153,13], [260,168,16], [276,171,36],
-  [290,150,65], [302,123,80], [LENGTH/SEGMENT,94,95],
-];
-const n = route.length-1;
-const wrap = (value,size) => (value%size+size)%size;
-const interpolate = (a,b,c,d,t) =>
-  b + .5*t*(c-a+t*(2*a-5*b+4*c-d+t*(3*b-a-3*c+d)));
-
-function pose(distance) {
-  const segment=wrap(distance,LENGTH)/SEGMENT;
-  let i=0;
-  while(segment>=route[i+1][0]) i++;
-  const a=route[wrap(i-1,n)], b=route[i], c=route[i+1], d=route[(i+2)%n];
-  const amount=(segment-b[0])/(c[0]-b[0]);
-  return {
-    x:interpolate(a[1],b[1],c[1],d[1],amount),
-    y:interpolate(a[2],b[2],c[2],d[2],amount),
-  };
-}
+import {HAIRPIN_START, HAIRPIN_END, LENGTH, SEGMENT, approachingHairpin} from './track.js?v=7';
+import {mapPose as pose} from './course.js?v=1';
 
 const outline=new Path2D();
 for(let i=0;i<=LENGTH/SEGMENT;i++){

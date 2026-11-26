@@ -184,7 +184,7 @@ body{color:var(--crt-text);color-scheme:dark}
 
 .preview-picture.cursed-preview{background:linear-gradient(#0001,#0001),url('cursed/preview.png?v=20261112-polish') center/cover}
 
-.preview-picture.kart-preview{background:#5aabb4 url('kart/preview.png?v=3') center/cover}
+.preview-picture.kart-preview{background:#5aabb4 url('kart/preview.png?v=4') center/cover}
 @media(max-width:600px){
   .game-option{min-height:54px;padding-block:7px}
   .game-option.selected::before{top:18px}
