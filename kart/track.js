@@ -26,9 +26,9 @@ const boxRespawn = 4;
 
 // The road, collision width, minimap, and camera all use the same surveyed distance.
 const zonesAt=[
-  [0,'pit',54],[35,'hill',76],[64,'hill',-87],[82,'woods',102],
-  [117,'woods',86],[135,'hill',-50],[162,'hill',-82],
-  [197,'hill',-37],[223,'woods',62],[260,'hill',44],[290,'pit',69],[311,'pit',54],
+  [0,'pit',0],[35,'hill',2],[64,'hill',-20],[82,'woods',19],
+  [117,'woods',19],[135,'hill',-1],[162,'hill',-23],
+  [197,'hill',-14],[223,'woods',17],[260,'hill',15],[290,'pit',2],[311,'pit',0],
 ];
 const boosts=[{segment:indexFor(163),lane:-.44},{segment:indexFor(263),lane:.49}];
 const signs=new Map([[29,1],[74,2],[125,-1],[160,-1],[213,1]].map(([raw,sign])=>[indexFor(raw),sign]));
@@ -36,6 +36,7 @@ function indexFor(raw) {return Math.floor(distanceFor(raw)/SEGMENT);}
 const limit=(value,low,high)=>Math.max(low,Math.min(high,value));
 const mod=(value,size)=>(value%size+size)%size;
 const smooth=value=>value*value*(3-2*value);
+const gradeEase=value=>value**3*(value*(value*6-15)+10);
 function narrow(raw,start,end,ramp) {
   return smooth(limit(Math.min((raw-start)/ramp,(end-raw)/ramp),0,1));
 }
@@ -45,9 +46,9 @@ export const track=Array.from({length:LENGTH/SEGMENT},(_,i)=>{
   const zoneIndex=zonesAt.findIndex(([end])=>end>raw)-1;
   const [from,zone,y]=zonesAt[zoneIndex], [to,,nextY]=zonesAt[zoneIndex+1];
   const hairpin=raw>=82&&raw<117,chicane=raw>=CHICANE_FIRST&&raw<CHICANE_LAST;
-  const width=1-.13*narrow(raw,82,117,7)-.19*narrow(raw,CHICANE_FIRST,CHICANE_LAST,5);
-  return {i,zone,hairpin,chicane,width,curve:limit(turnAt(distance),-16,16),
-    y:y+(nextY-y)*smooth((raw-from)/(to-from)),
+  const width=1-.15*narrow(raw,82,117,9)-.23*narrow(raw,CHICANE_FIRST,CHICANE_LAST,7);
+  return {i,zone,hairpin,chicane,width,pitLane:raw>=298||raw<25,curve:limit(turnAt(distance),-16,16),
+    y:y+(nextY-y)*gradeEase((distance-distanceFor(from))/(distanceFor(to)-distanceFor(from))),
     boost:boosts.find(pad=>i>=pad.segment&&i<pad.segment+3)?.lane,sign:signs.get(i)};
 });
 
@@ -88,7 +89,7 @@ export function createRace(random=Math.random) {
     speed:0, steering:0, launchBoost:0, boost:0, turbo:0, turboLevel:0, driftSide:0, driftCharge:0,
     hit:0, lane:grid[id][0], finished:null,
     items:[], lastBox:null, effects:[], itemBoost:0, chaseBoost:0, shield:0, slow:0, grip:0,
-    slide:0, nextSkid:0, contactAt:-Infinity, contactSide:0,
+    slide:0, driftHop:0, nextSkid:0, contactAt:-Infinity, contactSide:0,
   }));
   for(const racer of racers){
     placeKart(racer,racer.distance,racer.x);
@@ -126,7 +127,7 @@ export function launchRace(race,heldFor) {
 
 export function placeKart(racer,distance,lane) {
   const point=coursePose(distance,lane);
-  Object.assign(racer,{distance,x:lane,worldX:point.x,worldZ:point.z,heading:point.angle});
+  Object.assign(racer,{distance,x:lane,worldX:point.x,worldZ:point.z,heading:point.angle,motionHeading:point.angle});
 }
 
 export function recoverKart(race) {
@@ -161,7 +162,7 @@ export function recoverKart(race) {
 }
 
 function moveKart(racer,dt) {
-  const forwardX=Math.cos(racer.heading),forwardZ=Math.sin(racer.heading);
+  const forwardX=Math.cos(racer.motionHeading),forwardZ=Math.sin(racer.motionHeading);
   const travel=racer.speed*dt;
   const next=keepInField({x:racer.worldX+forwardX*travel,z:racer.worldZ+forwardZ*travel});
   const dx=next.x-racer.worldX,dz=next.z-racer.worldZ;
@@ -384,7 +385,8 @@ function planAI(racer,race) {
   const aim=angleBetween(Math.atan2(aimPoint.z-racer.worldZ,aimPoint.x-racer.worldX),racer.heading);
   const drift=!brake&&ratio>.57&&Math.abs(here.curve)>=style.drift&&
     Math.abs(aim)>.18&&Math.sign(aim)===Math.sign(here.curve)&&Math.abs(racer.x)<here.width-.09;
-  const steer=limit(aim*3.4,-1,1);
+  const slip=angleBetween(racer.heading,racer.motionHeading);
+  const steer=limit(aim*3.4+(drift?slip*.45:0),-1,1);
   return {brake,drift,throttle:racer.speed<=target,steer,useItem:aiItem(race,racer,curve,traffic)};
 }
 
@@ -405,31 +407,41 @@ function boostedSpeed(racer) {
 export function cancelDrift(racer) {
   racer.driftSide=0;
   racer.driftCharge=0;
+  racer.driftHop=0;
 }
 
 function updateDrift(racer,input,here,offRoad,dt) {
-  if(offRoad || input.brake || racer.speed<390) {
+  if(offRoad||input.brake||racer.speed<390) {
     cancelDrift(racer);
     return;
   }
   if(!input.drift) {
     if(racer.driftCharge>=DRIFT_FIRST) {
-      racer.turboLevel=racer.driftCharge>=DRIFT_SECOND?2:1;
-      racer.turbo=racer.turboLevel===2?1.02:.64;
+      const strong=racer.driftCharge>=DRIFT_SECOND;
+      racer.turboLevel=strong?2:1;
+      racer.turbo=strong?1.08:.68;
+      const cap=strong?1740:1605;
+      racer.speed=Math.max(racer.speed,Math.min(cap,racer.speed+(strong?190:105)));
     }
     cancelDrift(racer);
     return;
   }
-  if(!racer.driftSide && Math.abs(input.steer)>.22) racer.driftSide=Math.sign(input.steer);
+  if(!racer.driftSide&&Math.abs(input.steer)>.22) {
+    racer.driftSide=Math.sign(input.steer);
+    racer.driftHop=.18;
+  }
   if(racer.driftSide) {
-    const inTurn=here.curve*racer.driftSide>2.25;
-    racer.driftCharge=limit(racer.driftCharge+(inTurn?1:-.65)*dt,0,DRIFT_SECOND+.15);
+    const slip=Math.abs(angleBetween(racer.heading,racer.motionHeading));
+    const charging=here.curve*racer.driftSide>2.25&&slip>.10;
+    const rate=charging?Math.min(1.23,.91+slip*.75):-.5;
+    racer.driftCharge=limit(racer.driftCharge+rate*dt,0,DRIFT_SECOND+.15);
   }
 }
 
 function drive(racer, dt, input) {
   const here = segmentAt(racer.distance);
   racer.hit = Math.max(0,racer.hit - dt);
+  racer.driftHop=Math.max(0,racer.driftHop-dt);
   racer.launchBoost=Math.max(0,racer.launchBoost-dt);
   racer.itemBoost=Math.max(0,racer.itemBoost-dt);
   racer.chaseBoost=Math.max(0,racer.chaseBoost-dt);
@@ -446,9 +458,12 @@ function drive(racer, dt, input) {
   updateDrift(racer,input,here,offRoad&&!grippy,dt);
   racer.slide+=(racer.driftSide-racer.slide)*Math.min(1,dt*8);
   const drifting=racer.driftSide!==0;
-  const direction=drifting?limit(input.steer*.90+racer.driftSide*.28,-1.06,1.06):input.steer;
+  const direction=drifting?.67*input.steer+.33*racer.driftSide:input.steer;
   racer.steering=direction;
   if(racer.speed>25) racer.heading=angleBetween(racer.heading+direction*steerRate(ratio,input.brake,drifting,grippy)*dt,0);
+  const slip=drifting?racer.driftSide*(.085+Math.min(1,ratio)*.10):0;
+  const gripRate=drifting?10:racer.turbo>0?27:23;
+  racer.motionHeading+=angleBetween(racer.heading-slip,racer.motionHeading)*(1-Math.exp(-dt*gripRate));
 
   const ceiling=boostedSpeed(racer);
   const surfaceLimit=offRoad?(grippy?1020:490):ceiling;
@@ -507,8 +522,9 @@ export function stepRace(race, dt, input) {
     moveKart(racer,dt);
     const reached=racer.distance;
     racer.distance=Math.min(finishLine,reached);
-    if(racer.driftSide&&race.time>=racer.nextSkid) {
-      race.skids.push({x:racer.x,distance:racer.distance-62,side:racer.driftSide,time:race.time});
+    if(racer.driftSide&&racer.driftHop<=.055&&race.time>=racer.nextSkid) {
+      race.skids.push({x:racer.worldX-Math.cos(racer.motionHeading)*45,z:racer.worldZ-Math.sin(racer.motionHeading)*45,
+        y:roadHeight(racer.distance),side:racer.driftSide,time:race.time});
       racer.nextSkid=race.time+.075;
     }
     moves.push({racer,from,to:racer.distance,startX,reached});

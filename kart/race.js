@@ -1,7 +1,7 @@
-import {COUNTDOWN, DRIFT_FIRST, DRIFT_SECOND, ITEMS, ITEM_CAPACITY, LAPS, TOP_SPEED, approachingHairpin, cancelDrift, createRace, launchRace, order, recoverKart, segmentAt, stepRace} from './track.js?v=9';
-import {drawRace} from './render.js?v=9';
-import {drawMinimap} from './minimap.js?v=5';
-import {createRaceAudio} from './audio.js?v=4';
+import {COUNTDOWN, DRIFT_FIRST, DRIFT_SECOND, ITEMS, ITEM_CAPACITY, LAPS, TOP_SPEED, approachingHairpin, cancelDrift, createRace, launchRace, order, recoverKart, segmentAt, stepRace} from './track.js?v=10';
+import {drawRace} from './render.js?v=10';
+import {drawMinimap} from './minimap.js?v=6';
+import {createRaceAudio} from './audio.js?v=5';
 
 const $ = id => document.getElementById(id);
 const canvas = $('road'), context = canvas.getContext('2d');
@@ -86,8 +86,8 @@ function setOverlay() {
       : '인디 힐 서킷 · '+race.racers.length+'대 · '+LAPS+'바퀴';
     $('help').hidden = !onTitle;
     $('help').textContent = touch
-      ? '자동 가속 · 코너에서 드리프트를 놓으면 미니터보\n아이템 2개 보관 · 일시정지에서 트랙 복귀'
-      : '↑ 가속 · ↓ 브레이크 · ← → 조향\nShift + 조향으로 드리프트 · 놓으면 미니터보\n아이템 E · 트랙 복귀 R';
+      ? '자동 가속 · 조향과 드리프트를 함께 누르기\n스파크가 나면 드리프트를 놓아 미니터보\n아이템 2개 보관 · 일시정지에서 트랙 복귀'
+      : '↑ 가속 · ↓ 브레이크 · ← → 조향\nShift + 조향으로 드리프트 · 스파크가 나면 Shift를 놓기\n아이템 E · 트랙 복귀 R';
     $('best').hidden = best<=0;
     $('best').textContent = '최고 기록 ' + formatTime(best);
     $('start').textContent = onTitle?'경주 시작':mode==='paused'?'경주 재개':'다시 달리기';
@@ -335,7 +335,7 @@ function frame(now) {
     const input=readInput();
     const lap=race.lastLap;
     const boost=race.player.boost, turbo=race.player.turbo;
-    const charge=race.player.driftCharge, itemEvent=race.itemEvent, contact=race.contact;
+    const charge=race.player.driftCharge, wasDrifting=race.player.driftSide, itemEvent=race.itemEvent, contact=race.contact;
     while (accumulator>=fixedStep && race.player.finished===null) {
       stepRace(race,fixedStep,input);
       if(input.useItem){itemQueued=false;input.useItem=false;}
@@ -346,6 +346,7 @@ function frame(now) {
       const {type,item}=race.itemEvent;
       sound.effect(type==='used'?item:type);
     }
+    if(!wasDrifting&&race.player.driftSide) sound.effect('driftStart');
     if (race.lastLap!==lap) tone(640,.22);
     if ((race.player.boost>0 && boost===0) || (race.player.turbo>0 && turbo===0)) sound.effect('turbo');
     if (charge<DRIFT_FIRST && race.player.driftCharge>=DRIFT_FIRST) tone(520,.08);

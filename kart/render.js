@@ -1,5 +1,6 @@
-import {DRIFT_FIRST, DRIFT_SECOND, LENGTH, ROAD, SEGMENT, TOP_SPEED, roadHeight, track} from './track.js?v=9';
+import {DRIFT_FIRST, DRIFT_SECOND, LENGTH, ROAD, SEGMENT, TOP_SPEED, roadHeight, track} from './track.js?v=10';
 import {coursePose, roadPosition} from './course.js?v=3';
+import {spectators,structures} from './circuit-art.js?v=1';
 
 const zones = {
   pit:   {land:['#5e8261','#557859'], road:['#465368','#424e63'], curb:'#e3674c'},
@@ -29,12 +30,16 @@ const angleDelta=(a,b)=>Math.atan2(Math.sin(a-b),Math.cos(a-b));
 
 function viewFor(ctx,race,time) {
   const {width:w,height:h}=ctx.canvas, player=race.player;
-  const position={x:player.worldX,z:player.worldZ,y:roadHeight(player.distance)};
-  const heading=player.heading+player.slide*.10;
-  const previous=views.get(race);
-  const smoothing=previous?1-Math.exp(-Math.max(0,time-previous.time)*15):1;
+  const elevation=roadHeight(player.distance),previous=views.get(race);
+  const jumped=previous&&Math.hypot(previous.x-player.worldX,previous.z-player.worldZ)>340;
+  const delta=previous?Math.max(0,time-previous.time):0;
+  const ground=previous&&!jumped?previous.ground+(elevation-previous.ground)*(1-Math.exp(-delta*10)):elevation;
+  const position={x:player.worldX,z:player.worldZ,y:ground};
+  const blend=player.driftSide?.68:.92;
+  const heading=player.motionHeading+angleDelta(player.heading,player.motionHeading)*blend;
+  const smoothing=previous&&!jumped?1-Math.exp(-delta*15):1;
   const yaw=previous?previous.yaw+angleDelta(heading,previous.yaw)*smoothing:heading;
-  views.set(race,{yaw,time});
+  views.set(race,{yaw,time,ground,x:position.x,z:position.z});
   const forwardX=Math.cos(yaw),forwardZ=Math.sin(yaw);
   const rightX=-forwardZ,rightZ=forwardX;
   const pace=reduceMotion?0:Math.min(1,player.speed/TOP_SPEED);
@@ -68,7 +73,10 @@ function crossSection(point,view) {
 }
 
 function strip(ctx, color, near, far, view, left, right, nextLeft=left, nextRight=right, seal=false) {
-  const vertices=[near(left),near(right),far(nextRight),far(nextLeft)];
+  paintPolygon(ctx,color,[near(left),near(right),far(nextRight),far(nextLeft)],view,seal);
+}
+
+function paintPolygon(ctx,color,vertices,view,seal=false) {
   const clipped=[];
   for(let i=0;i<vertices.length;i++){
     const a=vertices[i],b=vertices[(i+1)%vertices.length];
@@ -95,7 +103,14 @@ function roadBand(ctx,view,entry,exit,terrain) {
     const land=palette.land[group];
     band(land,-1.53,-w,-1.53,-e);
     band(land,w,1.53,e,1.53);
-    if(Math.abs(segment.curve)>5.5) {
+    if(segment.pitLane) {
+      band('#71838a',1.25,1.96);
+      band('#dfd9ba',1.24,1.265);
+      band('#c6c8b0',1.94,1.97);
+      if(segment.i%4===0) band('#b0b5a6',1.60,1.65);
+      band('#777f78',1.12,1.21);
+    }
+    if(Math.abs(segment.curve)>5.5&&!segment.pitLane) {
       const side=-Math.sign(segment.curve);
       band(group?'#a48c68':'#b59b75',(w+.12)*side,1.40*side,(e+.12)*side,1.40*side);
     }
@@ -262,7 +277,12 @@ function itemFlash(ctx,x,y,size,event,time) {
 }
 
 function kart(ctx, x, y, size, driver, time) {
-  const tilt=Math.round((driver.steering*.12+driver.slide*.24)*size);
+  const slip=angleDelta(driver.heading,driver.motionHeading);
+  const tilt=Math.round((driver.steering*.11+slip*.51)*size);
+  if(driver.driftHop>0){
+    rect(ctx,'#26343a',x-size*.45,y-size*.022,size*.90,Math.max(1,size*.055));
+    y-=size*.17*Math.sin(Math.PI*(1-driver.driftHop/.18));
+  }
   const bounce = driver.speed>230 ? Math.floor(time*16)%2 : 0;
   const draw=(color,dx,dy,w,h,shift=0)=>rect(ctx,color,x+dx*size+shift,y+dy*size-bounce,w*size,h*size);
   if (driver.driftSide) {
@@ -295,7 +315,7 @@ function kart(ctx, x, y, size, driver, time) {
   }
   ctx.save();
   ctx.translate(x,y);
-  ctx.rotate(-driver.slide*.18);
+  ctx.rotate(-driver.slide*.13-slip*.26);
   ctx.translate(-x,-y);
   draw('#293446',-.52,-.10,1.04,.14);
   draw('#242930',-.52,-.45,.21,.42);
@@ -418,17 +438,29 @@ export function drawRace(ctx,race,time) {
   for(const {segment,point} of course) {
     if(segment.zone==='woods'&&segment.i%11===4) objectAt(roadPosition(point,-2.05),p=>scenery(ctx,segment,p,0));
     if(segment.zone==='woods'&&segment.i%13===8) objectAt(roadPosition(point,1.93),p=>scenery(ctx,segment,p,0));
-    if(segment.zone==='pit'&&segment.i%15===5) objectAt(roadPosition(point,1.70),p=>scenery(ctx,segment,p,0));
+    if(segment.zone==='pit'&&!segment.pitLane&&segment.i%15===5) objectAt(roadPosition(point,1.70),p=>scenery(ctx,segment,p,0));
     if(segment.sign) objectAt(roadPosition(point,-1.36*Math.sign(segment.sign)),p=>turnSign(ctx,p,segment.sign));
     if(segment.i===95||segment.i===184) objectAt(roadPosition(point,2.3),p=>tower(ctx,p));
   }
+  for(const {color,points} of structures) {
+    const vertices=points.map(point=>local(point,view));
+    if(vertices.every(v=>v.depth<nearPlane)||vertices.every(v=>v.depth>4300)) continue;
+    const depth=vertices.reduce((sum,p)=>sum+p.depth,0)/vertices.length;
+    scene.push({depth,paint:()=>paintPolygon(ctx,color,vertices,view)});
+  }
+  for(const spectator of spectators) objectAt(spectator,p=>{
+    const size=p.scale*29;
+    if(size<1.1) return;
+    rect(ctx,spectator.color,p.x-size*.42,p.y-size*1.22,size*.91,size*1.03);
+    rect(ctx,'#e9d1a4',p.x-size*.23,p.y-size*1.61,size*.57,size*.45);
+  });
   for(const driver of racers) {
     const distance=driver.finished===null||driver===player?driver.distance:driver.distance+60+driver.id*42;
     if(driver.finished===null||driver===player) {
       objectAt({x:driver.worldX,z:driver.worldZ,y:roadHeight(driver.distance)},p=>kart(ctx,p.x,p.y,Math.min(w*.23,p.scale*105),driver,time));
     } else moving(distance,driver.x,(x,y,size)=>kart(ctx,x,y,size,driver,time));
   }
-  for(const mark of race.skids) moving(mark.distance,mark.x,(x,y,size)=>skidMarks(ctx,x,y,size,mark,time));
+  for(const mark of race.skids) objectAt(mark,p=>skidMarks(ctx,p.x,p.y,Math.min(w*.23,p.scale*105),mark,time));
   const ahead=distance=>((distance-player.distance)%LENGTH+LENGTH)%LENGTH;
   for(const box of race.boxes) {
     if(box.readyAt<=time&&ahead(box.distance)<3700) moving(box.distance,box.x,(x,y,size)=>{if(size>=2)itemBox(ctx,x,y,size*.78,time);});
