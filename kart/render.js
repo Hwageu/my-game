@@ -1,6 +1,6 @@
-import {DRIFT_FIRST, DRIFT_SECOND, LENGTH, ROAD, SEGMENT, TOP_SPEED, roadHeight, track} from './track.js?v=10';
+import {DRIFT_FIRST, DRIFT_SECOND, LENGTH, ROAD, SEGMENT, TOP_SPEED, roadHeight, track} from './track.js?v=11';
 import {coursePose, roadPosition} from './course.js?v=3';
-import {spectators,structures} from './circuit-art.js?v=1';
+import {spectators,structures} from './circuit-art.js?v=2';
 
 const zones = {
   pit:   {land:['#5e8261','#557859'], road:['#465368','#424e63'], curb:'#e3674c'},

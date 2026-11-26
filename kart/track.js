@@ -5,6 +5,10 @@ export const TOP_SPEED = 1450;
 export const COUNTDOWN = 3;
 export const DRIFT_FIRST = .48;
 export const DRIFT_SECOND = 1.25;
+const brakeDeceleration=1340;
+const driftSteeringBias=.33;
+const driftSteeringInput=1-driftSteeringBias;
+const driftSlip=ratio=>.085+Math.min(1,ratio)*.10;
 
 export const ITEMS = {
   boost: '터보 캔',
@@ -75,11 +79,11 @@ const drivers = [
   ['MOSS', '#ee8965', '#ffd1a0', '#a05564'],
 ];
 const styles = [
-  { look:990, brake:.024, line:.16, passing:1.24, drift:9.5 },
-  { look:620, brake:.015, line:-.13, passing:1.03, drift:6.8 },
-  { look:1080,brake:.028, line:-.22, passing:.81, drift:13 },
-  { look:820, brake:.019, line:.18, passing:1.36, drift:8.5 },
-  { look:930, brake:.022, line:-.06, passing:.93, drift:10.6 },
+  { brake:.012, line:.11, passing:1.02, drift:6.4 },
+  { brake:.009, line:-.14, passing:1.08, drift:5.7 },
+  { brake:.017, line:-.19, passing:.83, drift:7.8 },
+  { brake:.010, line:.16, passing:1.27, drift:6.1 },
+  { brake:.014, line:-.06, passing:.95, drift:6.9 },
 ];
 const grid = [[-.45,-320],[.45,-70],[-.45,-70],[-.45,-195],[.45,-195],[.45,-320]];
 
@@ -337,57 +341,81 @@ function resolveItems(race,moves) {
 
 function planAI(racer,race) {
   const {racers,boxes,traps,time}=race;
-  const style = styles[racer.id-1];
-  const here = segmentAt(racer.distance);
-  const ahead = segmentAt(racer.distance + style.look*.5);
-  const nextTurn = segmentAt(racer.distance + style.look);
-  const curve = Math.max(Math.abs(here.curve), Math.abs(ahead.curve), Math.abs(nextTurn.curve));
-  const setup = Math.abs(here.curve)>2 ? here.curve*.042 : -ahead.curve*.047;
-  const line = limit(setup + style.line,-.57,.57);
-  let lane = line;
-  let best = -Infinity;
-  const ceiling = boostedSpeed(racer);
-  let target = ceiling * (1 - curve * style.brake);
+  const style=styles[racer.id-1];
+  const here=segmentAt(racer.distance);
+  const atEntry=segmentAt(racer.distance+360);
+  const setup=Math.abs(here.curve)>2 ? here.curve*.037 : -atEntry.curve*.029;
+  const line=limit(setup+style.line,-.56,.56);
+  let lane=line;
+  let best=-Infinity;
+  const ceiling=boostedSpeed(racer);
+  let target=ceiling, curve=Math.abs(here.curve);
+  // Plan a braking point from the same deceleration that the driver controls use.
+  for(let ahead=0;ahead<=880;ahead+=176) {
+    const bend=Math.abs(segmentAt(racer.distance+ahead).curve);
+    curve=Math.max(curve,bend);
+    const cornerSpeed=ceiling*(1-bend*style.brake);
+    const brakingRoom=2*brakeDeceleration*.83*ahead;
+    target=Math.min(target,Math.sqrt(cornerSpeed**2+brakingRoom));
+  }
   const traffic = racers.filter(other => other !== racer && other.finished === null)
     .map(other => ({other, gap: raceGap(racer.distance,other.distance)}))
-    .filter(({gap}) => gap > -115 && gap < 510);
+    .filter(({gap}) => gap > -140 && gap < 650);
   const upcomingBoxes=racer.items.length>=ITEM_CAPACITY?[]:boxes.filter(box=>{
     const gap=raceGap(racer.distance,box.distance);
-    return gap>0&&gap<730&&box.readyAt<=time+gap/Math.max(400,racer.speed);
+    return gap>100&&gap<680&&box.readyAt<=time+gap/Math.max(400,racer.speed);
   });
   const upcomingTraps=traps.filter(trap=>{
     const gap=raceGap(racer.distance,trap.distance);
     return trap.owner!==racer.id&&gap>0&&gap<380&&trap.armedAt<=time;
   });
-  for (const candidate of [line,-.64,.02,.64,...new Set(upcomingBoxes.map(box=>box.x))]) {
-    let value = -Math.abs(candidate - line) * 1.2 - Math.abs(candidate - racer.lane) * .43;
+  const safeLane=here.width-.16;
+  const itemLanes=upcomingBoxes.map(box=>box.x).filter(x=>Math.abs(x)<=safeLane);
+  for (const candidate of [line,-.59,0,.59,...new Set(itemLanes)]) {
+    let value = -Math.abs(candidate - line) * 1.22 - Math.abs(candidate - racer.lane) * .58;
     for (const {other, gap} of traffic) {
-      if (Math.abs(other.x - candidate) < .32) {
-        const closing = limit((target - other.speed + 130) / 330, .22, 2);
-        value -= (1 - Math.abs(gap) / 525) * closing * (gap > 0 ? 3.0 : 1.15) * style.passing;
-      }
+      const lateral=Math.abs(other.x-candidate);
+      const overlap=limit((.40-lateral)/.40,0,1);
+      const closing=limit((target-other.speed+150)/365,.30,1.7);
+      const spacing=gap>0?(1-gap/650)*closing*3.25:(1+gap/140)*2.15;
+      value-=overlap*spacing*style.passing;
     }
-    if(upcomingBoxes.some(box=>Math.abs(box.x-candidate)<.18)) value+=.88;
+    if(upcomingBoxes.some(box=>Math.abs(box.x-candidate)<.18)) value+=racer.driftSide?.32:.84;
     if(upcomingTraps.some(trap=>Math.abs(trap.x-candidate)<.24)) value-=racer.shield?0:1.75;
     if (value > best) { best = value; lane = candidate; }
   }
-  if (Math.abs(lane - racer.x) > .23) {
-    for (const {other, gap} of traffic) {
-      if (gap > 0 && gap < 140 && Math.abs(other.x - racer.x) < .26) {
-        target = Math.min(target, other.speed + 75);
-      }
+  for(const {other,gap} of traffic) {
+    if(gap>0&&gap<235&&Math.abs(other.x-racer.x)<.23) {
+      // Keep room until the front wheels have actually moved clear of the other kart.
+      const followingSpeed=other.speed+Math.max(0,gap-94)*2.6;
+      target=Math.min(target,followingSpeed);
     }
   }
   racer.lane = lane;
   const brake=racer.speed>target+33;
   const ratio=racer.speed/TOP_SPEED;
-  const aimPoint=coursePose(racer.distance+155+ratio*160,lane);
-  const aim=angleBetween(Math.atan2(aimPoint.z-racer.worldZ,aimPoint.x-racer.worldX),racer.heading);
-  const drift=!brake&&ratio>.57&&Math.abs(here.curve)>=style.drift&&
-    Math.abs(aim)>.18&&Math.sign(aim)===Math.sign(here.curve)&&Math.abs(racer.x)<here.width-.09;
-  const slip=angleBetween(racer.heading,racer.motionHeading);
-  const steer=limit(aim*3.4+(drift?slip*.45:0),-1,1);
-  return {brake,drift,throttle:racer.speed<=target,steer,useItem:aiItem(race,racer,curve,traffic)};
+  const steeringLook=145+ratio*150;
+  const aimPoint=coursePose(racer.distance+steeringLook,lane);
+  const aimDirection=Math.atan2(aimPoint.z-racer.worldZ,aimPoint.x-racer.worldX);
+  const aim=angleBetween(aimDirection,racer.heading);
+  const side=Math.sign(here.curve);
+  const after=segmentAt(racer.distance+260);
+  const driftSide=racer.driftSide;
+  const canDrift=ratio>.65&&Math.abs(racer.x)<here.width-.12;
+  const entering=canDrift&&Math.abs(here.curve)>=style.drift&&
+    after.curve*side>style.drift*.75&&aim*side>.10;
+  const holding=canDrift&&here.curve*driftSide>2.25&&after.curve*driftSide>2&&
+    Math.abs(aim)<.55;
+  const drift=!brake&&(driftSide?holding:entering);
+  let steer=aim*3.8;
+  if(drift) {
+    const turnSide=driftSide||side;
+    const slip=turnSide*driftSlip(ratio);
+    const correction=angleBetween(aimDirection+slip,racer.heading)*3.8;
+    steer=(correction-driftSteeringBias*turnSide)/driftSteeringInput;
+    if(!driftSide) steer=turnSide*Math.max(.3,steer*turnSide);
+  }
+  return {brake,drift,throttle:racer.speed<=target,steer:limit(steer,-1,1),useItem:aiItem(race,racer,curve,traffic)};
 }
 
 function steerRate(ratio,brake,drifting,grip) {
@@ -458,10 +486,10 @@ function drive(racer, dt, input) {
   updateDrift(racer,input,here,offRoad&&!grippy,dt);
   racer.slide+=(racer.driftSide-racer.slide)*Math.min(1,dt*8);
   const drifting=racer.driftSide!==0;
-  const direction=drifting?.67*input.steer+.33*racer.driftSide:input.steer;
+  const direction=drifting?driftSteeringInput*input.steer+driftSteeringBias*racer.driftSide:input.steer;
   racer.steering=direction;
   if(racer.speed>25) racer.heading=angleBetween(racer.heading+direction*steerRate(ratio,input.brake,drifting,grippy)*dt,0);
-  const slip=drifting?racer.driftSide*(.085+Math.min(1,ratio)*.10):0;
+  const slip=drifting?racer.driftSide*driftSlip(ratio):0;
   const gripRate=drifting?10:racer.turbo>0?27:23;
   racer.motionHeading+=angleBetween(racer.heading-slip,racer.motionHeading)*(1-Math.exp(-dt*gripRate));
 
@@ -469,7 +497,7 @@ function drive(racer, dt, input) {
   const surfaceLimit=offRoad?(grippy?1020:490):ceiling;
   const target=racer.slow>0?Math.min(surfaceLimit,840):surfaceLimit;
   const accelerating=input.throttle||ceiling>TOP_SPEED;
-  const acceleration=input.brake?-1340:ceiling>TOP_SPEED?1480:accelerating?815:-430;
+  const acceleration=input.brake?-brakeDeceleration:ceiling>TOP_SPEED?1480:accelerating?815:-430;
   racer.speed = limit(racer.speed + acceleration * dt, 0, Math.max(racer.speed,target));
   if (racer.speed > target) racer.speed = Math.max(target,racer.speed - (offRoad ? 1460 : 550) * dt);
 }

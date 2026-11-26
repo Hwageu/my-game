@@ -1,7 +1,7 @@
-import {COUNTDOWN, DRIFT_FIRST, DRIFT_SECOND, ITEMS, ITEM_CAPACITY, LAPS, TOP_SPEED, approachingHairpin, cancelDrift, createRace, launchRace, order, recoverKart, segmentAt, stepRace} from './track.js?v=10';
-import {drawRace} from './render.js?v=10';
-import {drawMinimap} from './minimap.js?v=6';
-import {createRaceAudio} from './audio.js?v=5';
+import {COUNTDOWN, DRIFT_FIRST, DRIFT_SECOND, ITEMS, ITEM_CAPACITY, LAPS, TOP_SPEED, approachingHairpin, cancelDrift, createRace, launchRace, order, recoverKart, segmentAt, stepRace} from './track.js?v=11';
+import {drawRace} from './render.js?v=11';
+import {drawMinimap} from './minimap.js?v=7';
+import {createRaceAudio} from './audio.js?v=6';
 
 const $ = id => document.getElementById(id);
 const canvas = $('road'), context = canvas.getContext('2d');
