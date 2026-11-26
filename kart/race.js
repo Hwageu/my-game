@@ -1,10 +1,13 @@
-import {COUNTDOWN, DRIFT_FIRST, DRIFT_SECOND, ITEMS, LAPS, TOP_SPEED, cancelDrift, createRace, order, stepRace} from './track.js?v=4';
-import {drawRace} from './render.js?v=4';
-import {drawMinimap} from './minimap.js?v=1';
+import {COUNTDOWN, DRIFT_FIRST, DRIFT_SECOND, ITEMS, ITEM_CAPACITY, LAPS, TOP_SPEED, approachingHairpin, cancelDrift, createRace, order, stepRace} from './track.js?v=6';
+import {drawRace} from './render.js?v=6';
+import {drawMinimap} from './minimap.js?v=2';
+import {createRaceAudio} from './audio.js?v=1';
 
 const $ = id => document.getElementById(id);
 const canvas = $('road'), context = canvas.getContext('2d');
 const itemButton = $('useItem');
+const sound=createRaceAudio();
+const tone=sound.tone;
 const courseMap = $('courseMap'), mapContext = $('minimap').getContext('2d');
 let itemQueued = false;
 const controls = [...document.querySelectorAll('[data-drive]')];
@@ -12,7 +15,7 @@ const embedded = parent !== window;
 let touch = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
 let muted = false, active = !embedded, mode = 'title', race = createRace();
 let deadline = 0, goUntil = 0, previous = performance.now(), accumulator = 0, lastSignal = '';
-let best = 0, audio, engine, engineGain;
+let best = 0;
 try {
   best = Number(localStorage.getItem('tidelineBestTime')) || 0;
   muted = localStorage.getItem('neonArcadeMuted') === 'true';
@@ -80,8 +83,8 @@ function setOverlay() {
       : '인디 힐 서킷 · 6대 · 2바퀴';
     $('help').hidden = !onTitle;
     $('help').textContent = touch
-      ? '자동 가속 · 코너에서 드리프트를 놓으면 미니터보\n박스를 지나고 아이템 버튼으로 사용'
-      : '↑ 가속 · ↓ 브레이크 · ← → 조향\nShift + 조향으로 드리프트 · 놓으면 미니터보\n박스 획득 후 E로 아이템 사용';
+      ? '자동 가속 · 코너에서 드리프트를 놓으면 미니터보\n아이템 2개 보관 · 버튼으로 순서대로 사용'
+      : '↑ 가속 · ↓ 브레이크 · ← → 조향\nShift + 조향으로 드리프트 · 놓으면 미니터보\n아이템 2개 보관 · E로 순서대로 사용';
     $('best').hidden = best<=0;
     $('best').textContent = '최고 기록 ' + formatTime(best);
     $('start').textContent = onTitle?'경주 시작':mode==='paused'?'경주 재개':'다시 달리기';
@@ -95,38 +98,8 @@ function setTouch(value) {
   setOverlay();
 }
 
-function ensureAudio() {
-  if (muted) return;
-  try {
-    if (!audio) {
-      audio = new AudioContext();
-      engine = audio.createOscillator();
-      engineGain = audio.createGain();
-      engine.type='triangle';
-      engineGain.gain.value=0;
-      engine.connect(engineGain).connect(audio.destination);
-      engine.start();
-    }
-    audio.resume().catch(()=>{});
-  } catch {}
-}
-function tone(hz,seconds=.13) {
-  if (muted || !audio) return;
-  const voice=audio.createOscillator(), gain=audio.createGain(), now=audio.currentTime;
-  voice.type='square';
-  voice.frequency.value=hz;
-  gain.gain.setValueAtTime(.032,now);
-  gain.gain.exponentialRampToValueAtTime(.0001,now+seconds);
-  voice.connect(gain).connect(audio.destination);
-  voice.start();
-  voice.stop(now+seconds);
-}
-function updateEngine() {
-  if (!audio||!engineGain) return;
-  const now=audio.currentTime;
-  engine.frequency.setTargetAtTime(50+race.player.speed*.10,now,.06);
-  engineGain.gain.setTargetAtTime(mode==='playing'&&active&&!muted ? .009+race.player.speed*.00001 : 0,now,.045);
-}
+function ensureAudio(){sound.unlock(muted);}
+function updateEngine(){sound.update(race.player,mode==='playing'&&active,muted);}
 function formatTime(seconds) {
   const centis=Math.floor(seconds*100);
   const pad=value=>String(value).padStart(2,'0');
@@ -189,7 +162,7 @@ for (const button of controls) {
   }
 }
 function queueItem() {
-  if(mode==='playing'&&race.player.item) {
+  if(mode==='playing'&&race.player.items.length) {
     itemQueued=true;
     ensureAudio();
   }
@@ -250,6 +223,7 @@ function updateHUD() {
     ['time',formatTime(race.player.finished??race.time)],['speed',String(Math.round(race.player.speed/TOP_SPEED*108))],
   ]) if ($(id).textContent!==value) $(id).textContent=value;
   updateItemHUD();
+  $('turnHint').hidden=mode!=='playing'||!approachingHairpin(race.player.distance);
   const {boost,turbo,itemBoost,driftSide,driftCharge}=race.player;
   $('boost').hidden=itemBoost<=0&&boost<=0&&turbo<=0;
   const boostLabel=itemBoost>0?'터보 캔':boost>0?'BOOST':'미니터보';
@@ -263,21 +237,24 @@ function updateHUD() {
 }
 
 function updateItemHUD() {
-  const item=race.player.item, name=ITEMS[item]??'비어 있음';
-  if($('heldItem').textContent!==name) $('heldItem').textContent=name;
-  const slot=$('itemSlot');
-  slot.hidden=mode==='title';
-  const itemType=item??'';
-  if(slot.dataset.item!==itemType) slot.dataset.item=itemType;
-  itemButton.disabled=!item||mode!=='playing';
-  const label=item?name+' 사용':'아이템 없음';
+  const dock=$('itemDock'), items=race.player.items;
+  dock.hidden=mode==='title';
+  for(const [index,id] of ['heldItem','reserveItem'].entries()) {
+    const field=$(id), type=items[index]?.type??'', name=ITEMS[type]??'비어 있음';
+    if(field.textContent!==name) field.textContent=name;
+    if(field.parentElement.dataset.item!==type) field.parentElement.dataset.item=type;
+  }
+  const count=items.length+' / '+ITEM_CAPACITY;
+  if($('itemCount').textContent!==count) $('itemCount').textContent=count;
+  itemButton.disabled=!items.length||mode!=='playing';
+  const label=items.length?ITEMS[items[0].type]+' 사용, '+items.length+'개 보유':'아이템 없음';
   if(itemButton.getAttribute('aria-label')!==label) itemButton.setAttribute('aria-label',label);
   const notice=$('itemNotice'), event=race.itemEvent;
   notice.hidden=!event||event.until<=race.time||mode!=='playing';
-  if(!notice.hidden){
-    const itemName=ITEMS[event.item];
-    const texts={picked:itemName+' 획득',used:itemName+' 사용',blocked:'실드로 충격 방어',slipped:'슬립 패드에 미끄러짐'};
-    if(notice.textContent!==texts[event.type]) notice.textContent=texts[event.type];
+  if(!notice.hidden) {
+    const name=ITEMS[event.item];
+    const messages={picked:name+' 획득',used:name+' 사용',blocked:'실드로 충격 방어',slipped:event.item==='pulse'?'펄스에 밀림':'슬립 패드에 미끄러짐'};
+    if(notice.textContent!==messages[event.type]) notice.textContent=messages[event.type];
   }
 }
 
@@ -314,11 +291,11 @@ function frame(now) {
       accumulator-=fixedStep;
     }
     if(race.itemEvent && race.itemEvent!==itemEvent) {
-      const tones={picked:600,used:490,blocked:740,slipped:190};
-      tone(tones[race.itemEvent.type],.17);
+      const {type,item}=race.itemEvent;
+      sound.effect(type==='used'?item:type);
     }
     if (race.lastLap!==lap) tone(640,.22);
-    if ((race.player.boost>0 && boost===0) || (race.player.turbo>0 && turbo===0)) tone(360,.20);
+    if ((race.player.boost>0 && boost===0) || (race.player.turbo>0 && turbo===0)) sound.effect('turbo');
     if (charge<DRIFT_FIRST && race.player.driftCharge>=DRIFT_FIRST) tone(520,.08);
     if (charge<DRIFT_SECOND && race.player.driftCharge>=DRIFT_SECOND) tone(690,.10);
     if (race.player.finished!==null) finish();

@@ -10,7 +10,12 @@ export const ITEMS = {
   boost: '터보 캔',
   shield: '범퍼 실드',
   slip: '슬립 패드',
+  grip: '그립 타이어',
+  pulse: '펄스 링',
 };
+export const ITEM_CAPACITY = 2;
+export const HAIRPIN_START = 82 * SEGMENT;
+export const HAIRPIN_END = 117 * SEGMENT;
 const itemTypes = Object.keys(ITEMS);
 const boxRows = [21,167,244];
 const boxLanes = [-.75,-.45,-.15,.15,.45,.75];
@@ -21,14 +26,14 @@ const boxRespawn = 4;
 const sections = [
   // Segments, curvature, scenery, exit elevation.
   [35,  0,    'pit',    78], // Brabham Straight
-  [29,  8.4,  'hill', -118], // Paddock Hill Bend
+  [29,  8.9,  'hill', -118], // Paddock Hill Bend
   [18,  0,    'hill',  118], // Climb to Druids
-  [35, 11.6,  'woods',  95], // Druids Hairpin
+  [35, 13.4,  'woods',  95], // Druids Hairpin
   [18,  0,    'woods', -72], // Descent to Graham Hill
-  [27, -7.4,  'hill',  -94], // Graham Hill Bend
+  [27, -8.2,  'hill',  -94], // Graham Hill Bend
   [35,  0,    'hill',  -50], // Cooper Straight
-  [21, -5.8,  'woods',  40], // Surtees
-  [18,  6.9,  'woods',  68], // McLaren
+  [21, -7.0,  'woods',  40], // Surtees
+  [18,  8.1,  'woods',  68], // McLaren
   [25,  2.6,  'hill',   48], // Clearways
   [29,  7.0,  'pit',    75], // Clark Curve
   [21,  0,    'pit',    54], // Approach to start/finish
@@ -36,7 +41,7 @@ const sections = [
 const segmentCount = sections.reduce((sum, [length]) => sum + length, 0);
 export const LENGTH = segmentCount * SEGMENT;
 const boosts = [{segment:176, lane:-.41}, {segment:251, lane:.52}];
-const signs = new Map([[27,1],[73,1],[128,-1],[189,-1],[211,1],[253,1]]);
+const signs = new Map([[27,1],[72,2],[78,2],[128,-1],[189,-1],[211,1],[253,1]]);
 const limit = (value, low, high) => Math.max(low, Math.min(high, value));
 const mod = (value, size) => (value % size + size) % size;
 const smooth = value => value * value * (3 - 2 * value);
@@ -50,10 +55,15 @@ for (const [length, turn, zone, exitHeight] of sections) {
     track.push({
       i, curve: turn * edge, zone, y: entryHeight+(exitHeight-entryHeight)*smooth(n/length),
       boost: boosts.find(pad => i >= pad.segment && i < pad.segment + 3)?.lane,
-      sign: signs.get(i),
+      sign: signs.get(i), hairpin:i*SEGMENT>=HAIRPIN_START&&i*SEGMENT<HAIRPIN_END,
     });
   }
   entryHeight=exitHeight;
+}
+
+export function approachingHairpin(distance) {
+  const lapDistance=mod(distance,LENGTH);
+  return lapDistance>=HAIRPIN_START-1850&&lapDistance<HAIRPIN_END;
 }
 
 export function segmentAt(distance) {
@@ -87,10 +97,11 @@ export function createRace(random=Math.random) {
     id, name, color, light, shade, x: grid[id][0], distance: grid[id][1],
     speed:0, steering:0, boost:0, turbo:0, turboLevel:0, driftSide:0, driftCharge:0,
     hit:0, lane:grid[id][0], finished:null,
-    item:null, itemAt:0, itemBoost:0, shield:0, slow:0,
+    items:[], lastBox:null, effects:[], itemBoost:0, shield:0, slow:0, grip:0,
+    slide:0, nextSkid:0,
   }));
   const boxes=boxRows.flatMap(segment=>boxLanes.map(x=>({x,distance:segment*SEGMENT+SEGMENT/2,readyAt:0})));
-  return {time:0,racers,player:racers[0],lastLap:1,finishPlace:null,random,boxes,traps:[],itemEvent:null};
+  return {time:0,racers,player:racers[0],lastLap:1,finishPlace:null,random,boxes,traps:[],skids:[],itemEvent:null};
 }
 
 export function lapAt(distance) {
@@ -107,26 +118,47 @@ function raceGap(from, to) {
   return mod(to - from + LENGTH / 2, LENGTH) - LENGTH / 2;
 }
 
-function playerItemEvent(race,racer,type,item) {
-  if(racer===race.player) race.itemEvent={type,item,until:race.time+1.4};
+function itemEvent(race,racer,type,item) {
+  const event={type,item,time:race.time,until:race.time+1.4};
+  if(racer.effects.length===4) racer.effects.shift();
+  racer.effects.push(event);
+  if(racer===race.player) race.itemEvent=event;
+}
+
+function nearby(race,racer) {
+  return race.racers.filter(other=>other!==racer&&other.finished===null&&
+    Math.hypot(raceGap(racer.distance,other.distance)/310,(racer.x-other.x)/.92)<=1);
+}
+
+function slowKart(race,racer,item) {
+  racer.speed*=item==='pulse'?.83:.78;
+  racer.slow=Math.max(racer.slow,item==='pulse'?.72:1);
+  cancelDrift(racer);
+  itemEvent(race,racer,'slipped',item);
 }
 
 function useItem(race,racer) {
-  const item=racer.item;
+  const item=racer.items.shift()?.type;
   if(!item) return;
-  racer.item=null;
   if(item==='boost') racer.itemBoost=1.10;
   if(item==='shield') racer.shield=4.5;
+  if(item==='grip') racer.grip=2.4;
   if(item==='slip') race.traps.push({owner:racer.id,x:racer.x,distance:racer.distance-78,armedAt:race.time+.22,expiresAt:race.time+16});
-  playerItemEvent(race,racer,'used',item);
+  if(item==='pulse') for(const other of nearby(race,racer)) {
+    if(!preventHit(race,other)) slowKart(race,other,item);
+  }
+  itemEvent(race,racer,'used',item);
 }
 
 function aiItem(race,racer,curve,traffic) {
-  if(!racer.item || race.time-racer.itemAt<.45) return false;
-  const longHold=race.time-racer.itemAt>5;
-  if(racer.item==='boost') return Math.abs(racer.x)<.82&&racer.speed>550&&
+  const held=racer.items[0];
+  if(!held||race.time-held.time<.45) return false;
+  const longHold=race.time-held.time>(racer.items.length===ITEM_CAPACITY?3.4:5);
+  if(held.type==='boost') return Math.abs(racer.x)<.82&&racer.speed>550&&
     (longHold||(!racer.boost&&!racer.turbo&&curve<5));
-  if(racer.item==='shield') return longHold||traffic.some(({gap})=>Math.abs(gap)<155);
+  if(held.type==='shield') return longHold||traffic.some(({gap})=>Math.abs(gap)<155);
+  if(held.type==='grip') return longHold||curve>7.5||Math.abs(racer.x)>.92;
+  if(held.type==='pulse') return longHold||nearby(race,racer).length>0;
   return longHold||race.racers.some(other=>{
     const gap=raceGap(other.distance,racer.distance);
     return other!==racer&&other.finished===null&&gap>95&&gap<900&&Math.abs(other.x-racer.x)<.33;
@@ -136,7 +168,7 @@ function aiItem(race,racer,curve,traffic) {
 function preventHit(race,racer) {
   if(racer.shield<=0) return false;
   racer.shield=0;
-  playerItemEvent(race,racer,'blocked','shield');
+  itemEvent(race,racer,'blocked','shield');
   return true;
 }
 
@@ -151,9 +183,9 @@ function resolveItems(race,moves) {
       const fraction=gap/(to-from);
       const x=startX+(racer.x-startX)*fraction;
       const offset=Math.abs(x-object.x);
-      if(offset<=radius) arrivals.push({racer,object,kind,fraction,offset});
+      if(offset<=radius) arrivals.push({racer,object,kind,fraction,offset,crossing:Math.round(from+gap)});
     };
-    if(!racer.item) for(const box of race.boxes) {
+    if(racer.items.length<ITEM_CAPACITY) for(const box of race.boxes) {
       if(box.readyAt<=race.time) check(box,'box',.18);
     }
     for(const trap of race.traps) {
@@ -161,20 +193,18 @@ function resolveItems(race,moves) {
     }
   }
   arrivals.sort((a,b)=>a.fraction-b.fraction||a.offset-b.offset||a.racer.id-b.racer.id);
-  for(const {racer,object,kind} of arrivals) {
+  for(const {racer,object,kind,crossing} of arrivals) {
     if(kind==='box') {
-      if(racer.item||object.readyAt>race.time) continue;
+      if(racer.items.length>=ITEM_CAPACITY||racer.lastBox===crossing||object.readyAt>race.time) continue;
       object.readyAt=race.time+boxRespawn;
-      racer.item=itemTypes[Math.floor(race.random()*itemTypes.length)];
-      racer.itemAt=race.time;
-      playerItemEvent(race,racer,'picked',racer.item);
+      const item=itemTypes[Math.floor(race.random()*itemTypes.length)];
+      racer.lastBox=crossing;
+      racer.items.push({type:item,time:race.time});
+      itemEvent(race,racer,'picked',item);
     } else if(object.expiresAt>race.time) {
       object.expiresAt=race.time;
       if(preventHit(race,racer)) continue;
-      racer.speed*=.78;
-      racer.slow=1;
-      cancelDrift(racer);
-      playerItemEvent(race,racer,'slipped','slip');
+      slowKart(race,racer,'slip');
     }
   }
 }
@@ -195,7 +225,7 @@ function planAI(racer,race) {
   const traffic = racers.filter(other => other !== racer && other.finished === null)
     .map(other => ({other, gap: raceGap(racer.distance,other.distance)}))
     .filter(({gap}) => gap > -115 && gap < 510);
-  const upcomingBoxes=racer.item?[]:boxes.filter(box=>{
+  const upcomingBoxes=racer.items.length>=ITEM_CAPACITY?[]:boxes.filter(box=>{
     const gap=raceGap(racer.distance,box.distance);
     return gap>0&&gap<730&&box.readyAt<=time+gap/Math.max(400,racer.speed);
   });
@@ -228,7 +258,7 @@ function planAI(racer,race) {
   const side = Math.sign(here.curve);
   const drift = !brake && ratio>.55 && Math.abs(here.curve)>=style.drift &&
     (racer.driftSide===side || Math.abs(racer.x-lane)<.38);
-  const adjust = (lane-racer.x)*3.1 + cornerSlip(here,ratio,drift);
+  const adjust = (lane-racer.x)*3.1 + cornerSlip(here,ratio,drift,racer.grip>0);
   let steer = adjust / steerRate(ratio,brake,drift);
   if(drift) {
     steer=(steer-side*.28)/.90;
@@ -237,8 +267,8 @@ function planAI(racer,race) {
   return {brake,drift,throttle:racer.speed<=target,steer:limit(steer,-1,1),useItem:aiItem(race,racer,curve,traffic)};
 }
 
-function cornerSlip(segment,ratio,drifting) {
-  return segment.curve*.174*ratio**2*(drifting?1.12:1);
+function cornerSlip(segment,ratio,drifting,grip) {
+  return segment.curve*.174*ratio**2*(drifting?1.12:1)*(grip?.76:1);
 }
 
 function steerRate(ratio,brake,drifting) {
@@ -283,21 +313,25 @@ function drive(racer, dt, input) {
   racer.itemBoost=Math.max(0,racer.itemBoost-dt);
   racer.shield=Math.max(0,racer.shield-dt);
   racer.slow=Math.max(0,racer.slow-dt);
+  racer.grip=Math.max(0,racer.grip-dt);
   racer.boost = Math.max(0,racer.boost - dt);
   racer.turbo = Math.max(0,racer.turbo - dt);
   if (here.boost !== undefined && Math.abs(racer.x - here.boost) < .24 && racer.speed > 420) racer.boost = .76;
 
   const ratio = racer.speed / TOP_SPEED;
   const offRoad = Math.abs(racer.x) > 1.04;
-  updateDrift(racer,input,here,offRoad,dt);
+  const grippy=racer.grip>0;
+  updateDrift(racer,input,here,offRoad&&!grippy,dt);
+  racer.slide+=(racer.driftSide-racer.slide)*Math.min(1,dt*8);
   const drifting=racer.driftSide!==0;
   const direction=drifting?limit(input.steer*.90+racer.driftSide*.28,-1.06,1.06):input.steer;
   racer.steering=direction;
   const steer=racer.speed>30?direction*steerRate(ratio,input.brake,drifting):0;
-  racer.x=limit(racer.x+(steer-cornerSlip(here,ratio,drifting))*dt,-1.48,1.48);
+  racer.x=limit(racer.x+(steer-cornerSlip(here,ratio,drifting,grippy))*dt,-1.48,1.48);
 
   const ceiling=boostedSpeed(racer);
-  const target=offRoad?490:racer.slow>0?Math.min(ceiling,840):ceiling;
+  const surfaceLimit=offRoad?(grippy?1020:490):ceiling;
+  const target=racer.slow>0?Math.min(surfaceLimit,840):surfaceLimit;
   const accelerating=input.throttle||ceiling>TOP_SPEED;
   const acceleration=input.brake?-1110:ceiling>TOP_SPEED?1240:accelerating?625:-370;
   racer.speed = limit(racer.speed + acceleration * dt, 0, Math.max(racer.speed,target));
@@ -310,14 +344,22 @@ export function stepRace(race, dt, input) {
   const plans=racers.slice(1).map(racer=>racer.finished===null?planAI(racer,race):null);
   race.time += dt;
   race.traps=race.traps.filter(trap=>trap.expiresAt>race.time);
+  const skidCutoff=race.time-1.4;
+  while(race.skids.length&&race.skids[0].time<skidCutoff) race.skids.shift();
+  for(const racer of racers) {
+    if(racer.finished===null&&(racer===player?input:plans[racer.id-1]).useItem) useItem(race,racer);
+  }
   const moves=[];
   for (const racer of racers) {
     if (racer.finished !== null) continue;
     const controls=racer===player?input:plans[racer.id-1];
-    if(controls.useItem) useItem(race,racer);
     const from=racer.distance, startX=racer.x;
     drive(racer,dt,controls);
     racer.distance=Math.min(finishLine,from+racer.speed*dt);
+    if(racer.driftSide&&race.time>=racer.nextSkid) {
+      race.skids.push({x:racer.x,distance:racer.distance-62,side:racer.driftSide,time:race.time});
+      racer.nextSkid=race.time+.075;
+    }
     moves.push({racer,from,to:racer.distance,startX,speed:racer.speed});
   }
   resolveItems(race,moves);

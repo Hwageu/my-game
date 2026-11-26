@@ -1,4 +1,4 @@
-import {LENGTH, SEGMENT} from './track.js?v=4';
+import {HAIRPIN_START, HAIRPIN_END, LENGTH, SEGMENT, approachingHairpin} from './track.js?v=6';
 
 // A schematic of Indy Hill: each point is tied to a driving segment.
 const route = [
@@ -33,6 +33,12 @@ for(let i=0;i<=LENGTH/SEGMENT;i++){
   else outline.lineTo(x,y);
 }
 outline.closePath();
+const hairpin=new Path2D();
+for(let distance=HAIRPIN_START;distance<=HAIRPIN_END;distance+=SEGMENT) {
+  const {x,y}=pose(distance);
+  if(distance===HAIRPIN_START) hairpin.moveTo(x,y);
+  else hairpin.lineTo(x,y);
+}
 const start=pose(0), next=pose(SEGMENT);
 const angle=Math.atan2(next.y-start.y,next.x-start.x);
 
@@ -46,6 +52,10 @@ export function drawMinimap(ctx,race) {
   ctx.lineWidth=4;
   ctx.strokeStyle='#bcd1bb';
   ctx.stroke(outline);
+  if(approachingHairpin(race.player.distance)) {
+    ctx.strokeStyle='#ffca75';
+    ctx.stroke(hairpin);
+  }
 
   ctx.save();
   ctx.translate(start.x,start.y);

@@ -1,4 +1,4 @@
-import {DRIFT_FIRST, DRIFT_SECOND, LENGTH, ROAD, SEGMENT, TOP_SPEED, roadHeight, segmentAt} from './track.js?v=4';
+import {DRIFT_FIRST, DRIFT_SECOND, LENGTH, ROAD, SEGMENT, TOP_SPEED, roadHeight, segmentAt} from './track.js?v=6';
 
 const fog = '#a8ddd4';
 const zones = {
@@ -56,8 +56,9 @@ function roadBand(ctx,w,near,far,segment) {
     const outside=-Math.sign(segment.curve);
     strip(ctx,group?'#bb9e70':'#cdb082',near,far,1.10*outside,1.82*outside);
   }
-  strip(ctx,group?'#f1d8aa':palette.curb,near,far,-1.10,-1);
-  strip(ctx,group?'#f1d8aa':palette.curb,near,far,1,1.10);
+  const curb=segment.hairpin?1.16:1.10;
+  strip(ctx,group?'#f1d8aa':palette.curb,near,far,-curb,-1);
+  strip(ctx,group?'#f1d8aa':palette.curb,near,far,1,curb);
   strip(ctx,palette.road[group],near,far,-1,1);
   strip(ctx,'#aba9a3',near,far,-.98,-.953);
   strip(ctx,'#aba9a3',near,far,.953,.98);
@@ -98,9 +99,23 @@ function scenery(ctx,segment,point,side) {
 function turnSign(ctx, point, direction) {
   const size = Math.min(33,point.width*.19);
   if (size<3) return;
-  const x=point.x-point.width*1.32*direction, y=point.y-size*.75;
+  const x=point.x-point.width*1.32*Math.sign(direction), y=point.y-size*.75;
   rect(ctx,'#4b5152',x-size*.05,y,size*.10,size*.76);
   rect(ctx,'#333f48',x-size*.50,y-size*.48,size,size*.49);
+  if(direction===2) {
+    ctx.save();
+    ctx.strokeStyle='#ffd48b';
+    ctx.lineWidth=Math.max(1,size*.085);
+    ctx.beginPath();
+    ctx.moveTo(x-size*.23,y-size*.10);
+    ctx.lineTo(x-size*.23,y-size*.28);
+    ctx.quadraticCurveTo(x,y-size*.54,x+size*.22,y-size*.28);
+    ctx.lineTo(x+size*.22,y-size*.10);
+    ctx.stroke();
+    polygon(ctx,'#ffd48b',[[x+size*.10,y-size*.19],[x+size*.34,y-size*.19],[x+size*.22,y-size*.04]]);
+    ctx.restore();
+    return;
+  }
   polygon(ctx,'#ffdb90',[
     [x-size*.33*direction,y-size*.28],[x+size*.10*direction,y-size*.28],
     [x+size*.10*direction,y-size*.40],[x+size*.33*direction,y-size*.23],
@@ -122,19 +137,80 @@ function slipPad(ctx,x,y,size) {
   polygon(ctx,'#593c65',[[x-size*.63,y],[x+size*.64,y],[x+size*.41,y-size*.21],[x-size*.43,y-size*.21]]);
   rect(ctx,'#e9b8f0',x-size*.32,y-size*.19,size*.64,Math.max(1,size*.08));
 }
+function skidMarks(ctx,x,y,size,mark,time) {
+  if(size<2) return;
+  const age=time-mark.time;
+  ctx.save();
+  ctx.globalAlpha=.76*Math.max(0,1-age/1.4);
+  ctx.strokeStyle='#222d39';
+  ctx.lineWidth=Math.max(1,size*.067);
+  ctx.beginPath();
+  for(const side of [-1,1]) {
+    const wheel=x+size*.29*side;
+    ctx.moveTo(wheel,y);
+    ctx.lineTo(wheel-size*.17*mark.side,y+size*.23);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+const itemColors={boost:'#ffba57',shield:'#a1efe1',slip:'#deb1f2',grip:'#adf0a0',pulse:'#8bd8ff'};
+function itemFlash(ctx,x,y,size,event,time) {
+  const elapsed=time-event.time;
+  if(elapsed<0||elapsed>.62||size<2) return;
+  const age=elapsed/.62, color=itemColors[event.item];
+  ctx.save();
+  ctx.fillStyle=ctx.strokeStyle=color;
+  ctx.globalAlpha=(1-age)*.95;
+  ctx.lineWidth=Math.max(1,size*.058*(1-age));
+  const pickup=event.type==='picked';
+  if(event.item==='pulse'&&event.type==='used') {
+    for(const phase of [0,.16]){
+      const spread=Math.max(.1,age-phase);
+      ctx.beginPath();
+      ctx.ellipse(x,y-size*.06,size*(.47+spread*3.4),size*(.12+spread*.58),0,0,Math.PI*2);
+      ctx.stroke();
+    }
+  } else if(event.item==='shield'&&!pickup) {
+    ctx.beginPath();
+    ctx.ellipse(x,y-size*.44,size*(.54+age),size*(.43+age*.48),0,0,Math.PI*2);
+    ctx.stroke();
+  } else {
+    const count=pickup?7:5;
+    for(let i=0;i<count;i++) {
+      const angle=i*Math.PI*2/count+(pickup?.28:1.1);
+      const spread=size*(.35+age*.82);
+      const px=x+Math.cos(angle)*spread, py=y-size*(.35+age*.44)+Math.sin(angle)*spread*.62;
+      ctx.fillRect(Math.round(px),Math.round(py),Math.max(1,size*.08),Math.max(1,size*(pickup?.08:.16)));
+    }
+  }
+  ctx.restore();
+}
+
 function kart(ctx, x, y, size, driver, time) {
-  const tilt = Math.round((driver.steering*.14+driver.driftSide*.095)*size);
+  const tilt=Math.round((driver.steering*.12+driver.slide*.24)*size);
   const bounce = driver.speed>230 ? Math.floor(time*16)%2 : 0;
   const draw=(color,dx,dy,w,h,shift=0)=>rect(ctx,color,x+dx*size+shift,y+dy*size-bounce,w*size,h*size);
   if (driver.driftSide) {
-    const side=driver.driftSide, pulse=Math.floor(time*24)%4;
-    draw('#c2c4ad',(-.58-pulse*.026)*side,-.14+pulse*.024,.20,.08);
-    draw('#9da99d',(-.70-pulse*.030)*side,-.03+pulse*.032,.14,.059);
-    if (driver.driftCharge>=DRIFT_FIRST) {
-      const sparks=driver.driftCharge>=DRIFT_SECOND?'#ffd078':'#9be8ff';
-      draw(sparks,-.49,-.11,.105,.07);
-      draw(sparks,.41,-.11,.102,.08);
-      draw(sparks,(-.60-pulse*.044)*side,.05+pulse*.03,.066,.05);
+    const side=driver.driftSide, phase=time*10;
+    for(let i=0;i<6;i++){
+      const age=(phase+i/6)%1;
+      const dx=(-.35-age*.62)*side+(i%2?.20:-.20);
+      const dy=-.10+age*.44;
+      const puff=.10+age*.17;
+      ctx.save();
+      ctx.globalAlpha=(1-age)*.72;
+      draw(i%2?'#e2e3c8':'#a7b6b0',dx,dy,puff*1.35,puff);
+      ctx.restore();
+    }
+    const charge=driver.driftCharge;
+    const spark=charge>=DRIFT_SECOND?'#ffc45c':charge>=DRIFT_FIRST?'#76ddff':'#e0dbc8';
+    const tip=charge>=DRIFT_SECOND?'#fff4b0':'#f4fbff';
+    for(let i=0;i<5;i++){
+      const age=(time*14+i/5)%1;
+      const dx=(-.36-age*.67)*side+(i%2?.20:-.20);
+      draw(spark,dx,-.055+age*.30,.145+age*.07,.048);
+      if(charge>=DRIFT_FIRST) draw(tip,dx+.02,-.079+age*.30,.069,.036);
     }
   }
   if (driver.itemBoost>0 || driver.boost>0 || driver.turbo>0) {
@@ -143,6 +219,10 @@ function kart(ctx, x, y, size, driver, time) {
     draw(flame,-.26,-.03,.14,.17+ripple*.05);
     draw('#f9de9a',.12,-.03,.14,.22-ripple*.035);
   }
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.rotate(-driver.slide*.18);
+  ctx.translate(-x,-y);
   draw('#293446',-.52,-.10,1.04,.14);
   draw('#242930',-.52,-.45,.21,.42);
   draw('#242930',.31,-.45,.21,.42);
@@ -161,6 +241,7 @@ function kart(ctx, x, y, size, driver, time) {
   draw('#ede2c4',-.21,-.78,.42,.075,tilt);
   draw('#28343e',-.14,-.70,.28,.09,tilt);
   if (driver.hit>.22) draw('#efc97a',.4,-.76,.16,.09);
+  ctx.restore();
   if(driver.shield>0){
     ctx.save();
     ctx.strokeStyle='#a1efe1';
@@ -171,6 +252,11 @@ function kart(ctx, x, y, size, driver, time) {
     ctx.restore();
   }
   if(driver.slow>0) draw('#dfb0ea',-.45,-.06,.88,.09);
+  if(driver.grip>0){
+    draw('#adf0a0',-.48,-.15,.17,.09);
+    draw('#adf0a0',.31,-.15,.17,.09);
+  }
+  for(const effect of driver.effects) itemFlash(ctx,x,y,size,effect,time);
 }
 
 export function drawRace(ctx,race,time) {
@@ -190,11 +276,11 @@ export function drawRace(ctx,race,time) {
     const segment = segmentAt(base+i*SEGMENT);
     points.push({segment, center, depth:base+i*SEGMENT-cameraZ});
     center += angle;
-    angle += segment.curve * 1.22;
+    angle+=segment.curve*(segment.hairpin?1.48:1.26);
   }
   const ahead = Math.floor(progress);
   const centerAtPlayer = points[ahead].center+(points[ahead+1].center-points[ahead].center)*(progress-ahead);
-  const cameraX = centerAtPlayer + player.x*ROAD*.74;
+  const cameraX=centerAtPlayer+player.x*ROAD*.74+player.slide*67;
   for (const point of points) {
     const depth = Math.max(20,point.depth);
     point.scale=scale/depth;
@@ -203,7 +289,7 @@ export function drawRace(ctx,race,time) {
     point.width=ROAD*point.scale;
   }
 
-  sky(ctx,w,h,horizon,-player.x*13-segmentAt(player.distance+650).curve*1.5);
+  sky(ctx,w,h,horizon,-player.x*13-player.slide*10-segmentAt(player.distance+650).curve*1.5);
   const buckets = new Map();
   function place(object,distance) {
     const depth=((distance-cameraZ)%LENGTH+LENGTH)%LENGTH;
@@ -217,6 +303,7 @@ export function drawRace(ctx,race,time) {
     const distance=driver.finished===null||driver===player?driver.distance:driver.distance+60+driver.id*42;
     place({kind:'kart',x:driver.x,driver},distance);
   }
+  for(const mark of race.skids) place({kind:'skid',x:mark.x,mark},mark.distance);
   for(const box of race.boxes) {
     if(box.readyAt<=time) place({kind:'box',x:box.x},box.distance);
   }
@@ -239,7 +326,7 @@ export function drawRace(ctx,race,time) {
     }
     const list=buckets.get(i);
     if (!list) continue;
-    for (const {kind,x,driver,depth} of list.sort((a,b)=>b.depth-a.depth)) {
+    for (const {kind,x,driver,mark,depth} of list.sort((a,b)=>b.depth-a.depth)) {
       const amount=(depth-near.depth)/SEGMENT;
       const relativeX=near.center+(far.center-near.center)*amount-cameraX;
       const ground=near.segment.y+(far.segment.y-near.segment.y)*amount;
@@ -247,6 +334,7 @@ export function drawRace(ctx,race,time) {
       const screenX=w/2+(relativeX+x*ROAD)*s;
       const screenY=horizon+(cameraY-ground)*s;
       const size=Math.min(w*.22,s*105);
+      if(kind==='skid') skidMarks(ctx,screenX,screenY,size,mark,time);
       if(kind==='kart') kart(ctx,screenX,screenY,size,driver,time);
       if(kind==='box'&&size>=2) itemBox(ctx,screenX,screenY,size*.78,time);
       if(kind==='trap'&&size>=2) slipPad(ctx,screenX,screenY,size);
