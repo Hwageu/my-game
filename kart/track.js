@@ -1,7 +1,7 @@
-import {LENGTH, ROAD, SEGMENT, coursePose, keepInField, projectOnCourse} from './course.js?v=2';
+import {LENGTH, ROAD, SEGMENT, coursePose, distanceFor, keepInField, projectOnCourse, rawProgress, turnAt} from './course.js?v=3';
 export {LENGTH,ROAD,SEGMENT};
 export const LAPS = 3;
-export const TOP_SPEED = 1270;
+export const TOP_SPEED = 1450;
 export const COUNTDOWN = 3;
 export const DRIFT_FIRST = .48;
 export const DRIFT_SECOND = 1.25;
@@ -16,61 +16,40 @@ export const ITEMS = {
   chase: '추격 부스터',
 };
 export const ITEM_CAPACITY = 2;
-export const HAIRPIN_START = 82 * SEGMENT;
-export const HAIRPIN_END = 117 * SEGMENT;
+export const HAIRPIN_START = distanceFor(82);
+export const HAIRPIN_END = distanceFor(117);
 const CHICANE_FIRST=169, CHICANE_LAST=197;
 const itemTypes = Object.keys(ITEMS);
 const boxRows = [21,73,156,233];
 const boxLanes = [-.75,-.45,-.15,.15,.45,.75];
 const boxRespawn = 4;
 
-// The corner order follows the Brands Hatch Indy layout. Length, grade and
-// curvature are tuned for short kart races.
-const sections = [
-  // Segments, curvature, scenery, exit elevation.
-  [35,  0,    'pit',    78], // Brabham Straight
-  [29,  8.9,  'hill', -118], // Paddock Hill Bend
-  [18,  0,    'hill',  118], // Climb to Druids
-  [35, 13.4,  'woods',  95], // Druids Hairpin
-  [18,  0,    'woods', -72], // Descent to Graham Hill
-  [27, -8.2,  'hill',  -94], // Graham Hill Bend
-  [7,   0,    'hill',  -91], // Cooper approach
-  [9, -10.9,  'hill',  -79], // Ridge chicane entry
-  [10, 13.4,  'hill',  -58], // Ridge chicane apex
-  [9, -10.1,  'hill',  -50], // Ridge chicane exit
-  [21, -7.0,  'woods',  40], // Surtees
-  [18,  8.1,  'woods',  68], // McLaren
-  [25,  2.6,  'hill',   48], // Clearways
-  [29,  7.0,  'pit',    75], // Clark Curve
-  [21,  0,    'pit',    54], // Approach to start/finish
+// The road, collision width, minimap, and camera all use the same surveyed distance.
+const zonesAt=[
+  [0,'pit',54],[35,'hill',76],[64,'hill',-87],[82,'woods',102],
+  [117,'woods',86],[135,'hill',-50],[162,'hill',-82],
+  [197,'hill',-37],[223,'woods',62],[260,'hill',44],[290,'pit',69],[311,'pit',54],
 ];
-const segmentCount = sections.reduce((sum, [length]) => sum + length, 0);
-if(segmentCount*SEGMENT!==LENGTH) throw Error('Course length and sections must match');
-const boosts = [{segment:176, lane:-.41}, {segment:251, lane:.52}];
-const signs = new Map([[27,1],[72,2],[78,2],[128,-1],[160,-1],[166,-1],[189,-1],[211,1],[253,1]]);
-const limit = (value, low, high) => Math.max(low, Math.min(high, value));
-const mod = (value, size) => (value % size + size) % size;
-const smooth = value => value * value * (3 - 2 * value);
-
-export const track = [];
-let entryHeight = sections.at(-1)[3];
-for (const [length, turn, zone, exitHeight] of sections) {
-  for (let n = 0; n < length; n++) {
-    const i = track.length;
-    const ramp=length<12?2.75:5;
-    const edge=smooth(Math.min(1,n/ramp,(length-n)/ramp));
-    const chicane=i>=CHICANE_FIRST&&i<CHICANE_LAST;
-    const hairpin=i*SEGMENT>=HAIRPIN_START&&i*SEGMENT<HAIRPIN_END;
-    const width=chicane?1-.23*smooth(Math.min(1,(i-CHICANE_FIRST)/5,(CHICANE_LAST-i)/5)):
-      hairpin?1-.14*smooth(Math.min(1,n/8,(length-n)/8)):1;
-    track.push({
-      i, curve: turn * edge, zone, y: entryHeight+(exitHeight-entryHeight)*smooth(n/length),
-      boost: boosts.find(pad => i >= pad.segment && i < pad.segment + 3)?.lane,
-      sign:signs.get(i),hairpin,chicane,width,
-    });
-  }
-  entryHeight=exitHeight;
+const boosts=[{segment:indexFor(163),lane:-.44},{segment:indexFor(263),lane:.49}];
+const signs=new Map([[29,1],[74,2],[125,-1],[160,-1],[213,1]].map(([raw,sign])=>[indexFor(raw),sign]));
+function indexFor(raw) {return Math.floor(distanceFor(raw)/SEGMENT);}
+const limit=(value,low,high)=>Math.max(low,Math.min(high,value));
+const mod=(value,size)=>(value%size+size)%size;
+const smooth=value=>value*value*(3-2*value);
+function narrow(raw,start,end,ramp) {
+  return smooth(limit(Math.min((raw-start)/ramp,(end-raw)/ramp),0,1));
 }
+
+export const track=Array.from({length:LENGTH/SEGMENT},(_,i)=>{
+  const distance=i*SEGMENT,raw=rawProgress(distance);
+  const zoneIndex=zonesAt.findIndex(([end])=>end>raw)-1;
+  const [from,zone,y]=zonesAt[zoneIndex], [to,,nextY]=zonesAt[zoneIndex+1];
+  const hairpin=raw>=82&&raw<117,chicane=raw>=CHICANE_FIRST&&raw<CHICANE_LAST;
+  const width=1-.13*narrow(raw,82,117,7)-.19*narrow(raw,CHICANE_FIRST,CHICANE_LAST,5);
+  return {i,zone,hairpin,chicane,width,curve:limit(turnAt(distance),-16,16),
+    y:y+(nextY-y)*smooth((raw-from)/(to-from)),
+    boost:boosts.find(pad=>i>=pad.segment&&i<pad.segment+3)?.lane,sign:signs.get(i)};
+});
 
 export function approachingHairpin(distance) {
   const lapDistance=mod(distance,LENGTH);
@@ -115,7 +94,7 @@ export function createRace(random=Math.random) {
     placeKart(racer,racer.distance,racer.x);
     racer.safe={distance:racer.distance,lane:racer.x};
   }
-  const boxes=boxRows.flatMap(segment=>boxLanes.map(x=>({x,distance:segment*SEGMENT+SEGMENT/2,readyAt:0})));
+  const boxes=boxRows.flatMap(segment=>boxLanes.map(x=>({x,distance:distanceFor(segment+.5),readyAt:0})));
   return {time:0,racers,player:racers[0],lastLap:1,finishPlace:null,random,boxes,traps:[],discs:[],skids:[],itemEvent:null,contact:null};
 }
 
@@ -135,7 +114,7 @@ const launchMin=.12, launchMax=1;
 export function applyStartBoost(racer,secondsHeld) {
   if(secondsHeld<launchMin||secondsHeld>launchMax||!Number.isFinite(secondsHeld)) return false;
   racer.launchBoost=.88;
-  racer.speed=Math.max(racer.speed,540);
+  racer.speed=Math.max(racer.speed,625);
   return true;
 }
 
@@ -246,7 +225,7 @@ function frontTarget(race,distance,x,owner,range) {
 }
 
 function stepDiscs(race,dt,moves) {
-  const travel=1900*dt;
+  const travel=2210*dt;
   race.discs=race.discs.filter(disc=>{
     if(disc.expiresAt<=race.time) return false;
     const target=frontTarget(race,disc.distance,disc.x,disc.owner,1200);
@@ -410,16 +389,16 @@ function planAI(racer,race) {
 }
 
 function steerRate(ratio,brake,drifting,grip) {
-  return (1.63+Math.min(1.35,ratio)*.45+(brake?.80:0)+(drifting?.90:0)+(grip?.27:0))*
+  return (1.72+Math.min(1.35,ratio)*.48+(brake?.80:0)+(drifting?.90:0)+(grip?.27:0))*
     Math.min(1,.55+ratio*.70);
 }
 
 function boostedSpeed(racer) {
-  if(racer.chaseBoost>0) return 1740;
-  if(racer.itemBoost>0) return 1610;
-  if(racer.launchBoost>0) return 1480;
-  if(racer.boost>0) return 1580;
-  if(racer.turbo>0) return racer.turboLevel===2?1560:1450;
+  if(racer.chaseBoost>0) return 1940;
+  if(racer.itemBoost>0) return 1790;
+  if(racer.launchBoost>0) return 1650;
+  if(racer.boost>0) return 1760;
+  if(racer.turbo>0) return racer.turboLevel===2?1740:1605;
   return TOP_SPEED;
 }
 
@@ -475,7 +454,7 @@ function drive(racer, dt, input) {
   const surfaceLimit=offRoad?(grippy?1020:490):ceiling;
   const target=racer.slow>0?Math.min(surfaceLimit,840):surfaceLimit;
   const accelerating=input.throttle||ceiling>TOP_SPEED;
-  const acceleration=input.brake?-1110:ceiling>TOP_SPEED?1240:accelerating?625:-370;
+  const acceleration=input.brake?-1340:ceiling>TOP_SPEED?1480:accelerating?815:-430;
   racer.speed = limit(racer.speed + acceleration * dt, 0, Math.max(racer.speed,target));
   if (racer.speed > target) racer.speed = Math.max(target,racer.speed - (offRoad ? 1460 : 550) * dt);
 }

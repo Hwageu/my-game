@@ -1,5 +1,5 @@
-import {DRIFT_FIRST, DRIFT_SECOND, ROAD, SEGMENT, TOP_SPEED, roadHeight, track} from './track.js?v=8';
-import {coursePose, roadPosition} from './course.js?v=2';
+import {DRIFT_FIRST, DRIFT_SECOND, LENGTH, ROAD, SEGMENT, TOP_SPEED, roadHeight, track} from './track.js?v=9';
+import {coursePose, roadPosition} from './course.js?v=3';
 
 const zones = {
   pit:   {land:['#5e8261','#557859'], road:['#465368','#424e63'], curb:'#e3674c'},
@@ -22,7 +22,8 @@ function polygon(ctx, color, points) {
 }
 const course=track.map(segment=>({segment,point:{...coursePose(segment.i*SEGMENT),y:segment.y}}));
 const nearPlane=90;
-const farPlane=8500;
+const farPlane=6100;
+const reduceMotion=typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
 const views=new WeakMap();
 const angleDelta=(a,b)=>Math.atan2(Math.sin(a-b),Math.cos(a-b));
 
@@ -36,9 +37,11 @@ function viewFor(ctx,race,time) {
   views.set(race,{yaw,time});
   const forwardX=Math.cos(yaw),forwardZ=Math.sin(yaw);
   const rightX=-forwardZ,rightZ=forwardX;
-  const focal=w*.44, horizon=h*.35;
-  const follow=490+Math.min(1,Math.max(0,player.speed/TOP_SPEED-1)*4)*32;
-  const slide=player.x*118+player.slide*76;
+  const pace=reduceMotion?0:Math.min(1,player.speed/TOP_SPEED);
+  const surge=reduceMotion?0:Math.min(1,Math.max(0,player.speed/TOP_SPEED-1)*3);
+  const focal=w*(.52-.076*pace-.025*surge), horizon=h*(.36-.020*pace);
+  const follow=410+58*pace+27*surge;
+  const slide=Math.max(-.82,Math.min(.82,player.x))*90+player.slide*52;
   return {
     w,h,yaw,horizon,focal,forwardX,forwardZ,rightX,rightZ,
     x:position.x-forwardX*follow-rightX*slide,
@@ -90,21 +93,24 @@ function roadBand(ctx,view,entry,exit,terrain) {
     strip(ctx,color,near,far,view,left,right,nextLeft,nextRight,seal);
   if(terrain) {
     const land=palette.land[group];
-    band(land,-1.85,-w,-1.85,-e);
-    band(land,w,1.85,e,1.85);
-    if(segment.zone==='pit') band(group?'#667b7a':'#718482',-1.45,-w-.09,-1.45,-e-.09);
-    if(segment.hairpin||segment.chicane||Math.abs(segment.curve)>5.5) {
-      const side=-Math.sign(segment.curve||1);
-      band(group?'#ad946d':'#c5a977',(w+.12)*side,1.60*side,(e+.12)*side,1.60*side);
+    band(land,-1.53,-w,-1.53,-e);
+    band(land,w,1.53,e,1.53);
+    if(Math.abs(segment.curve)>5.5) {
+      const side=-Math.sign(segment.curve);
+      band(group?'#a48c68':'#b59b75',(w+.12)*side,1.40*side,(e+.12)*side,1.40*side);
     }
     return;
   }
-  const curb=(segment.chicane||segment.hairpin) ? .15 : .10;
-  const curbColor=group?'#f1d8aa':palette.curb;
-  band(curbColor,-w-curb,-w,-e-curb,-e);
-  band(curbColor,w,w+curb,e,e+curb);
   band(palette.road[group],-w,w,-e,e,true);
-  if(segment.i%8<3) band('#a6a79d',-.012,.012);
+  const corner=segment.chicane||segment.hairpin||Math.abs(segment.curve)>4;
+  const edgeColor=corner?(group?'#efe3c9':palette.curb):'#d4d9bf';
+  const edge=corner?.085:.021;
+  band(edgeColor,-w-edge,-w+edge*.25,-e-edge,-e+edge*.25);
+  band(edgeColor,w-edge*.25,w+edge,e-edge*.25,e+edge);
+  if(!corner&&segment.i%5===1) {
+    band('#a4b0ad',-w+.095,-w+.145,-e+.095,-e+.145);
+    band('#a4b0ad',w-.145,w-.095,e-.145,e-.095);
+  }
 
   if(segment.boost!==undefined) {
     const lane=segment.boost;
@@ -360,6 +366,30 @@ function coilDisc(ctx,x,y,size,time) {
   rect(ctx,flash,x-size*.13,y-size*.28,size*.26,size*.10);
 }
 
+function speedStreaks(ctx,view,time,player) {
+  if(reduceMotion) return;
+  const {w,h}=view;
+  const ratio=player.speed/TOP_SPEED;
+  const strength=Math.min(1,Math.max(0,(ratio-.72)/.48));
+  if(strength===0) return;
+  const powered=player.chaseBoost>0||player.itemBoost>0||player.turbo>0;
+  const color=player.chaseBoost>0?'#c6ffe9':powered?'#ffe0aa':'#deeee3';
+  ctx.save();
+  ctx.strokeStyle=color;
+  for(let i=0;i<6;i++){
+    const side=i%2?-1:1, flow=(time*3.8+i/6)%1;
+    const x=w*(.5+side*(.28+flow*.22));
+    const y=h*(.53+.39*flow);
+    ctx.globalAlpha=strength*flow*(powered?.48:.23);
+    ctx.lineWidth=powered?2:1;
+    ctx.beginPath();
+    ctx.moveTo(x,y);
+    ctx.lineTo(x-w*side*(.019+flow*.04),y-h*(.022+flow*.05));
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 export function drawRace(ctx,race,time) {
   const view=viewFor(ctx,race,time), {w,h}=view, {player,racers}=race;
   sky(ctx,view);
@@ -386,8 +416,9 @@ export function drawRace(ctx,race,time) {
   }
 
   for(const {segment,point} of course) {
-    if(segment.i%7===3) objectAt(roadPosition(point,segment.zone==='woods'?-1.65:1.55),p=>scenery(ctx,segment,p,0));
-    if(segment.i%13===7) objectAt(roadPosition(point,-1.65),p=>scenery(ctx,segment,p,0));
+    if(segment.zone==='woods'&&segment.i%11===4) objectAt(roadPosition(point,-2.05),p=>scenery(ctx,segment,p,0));
+    if(segment.zone==='woods'&&segment.i%13===8) objectAt(roadPosition(point,1.93),p=>scenery(ctx,segment,p,0));
+    if(segment.zone==='pit'&&segment.i%15===5) objectAt(roadPosition(point,1.70),p=>scenery(ctx,segment,p,0));
     if(segment.sign) objectAt(roadPosition(point,-1.36*Math.sign(segment.sign)),p=>turnSign(ctx,p,segment.sign));
     if(segment.i===95||segment.i===184) objectAt(roadPosition(point,2.3),p=>tower(ctx,p));
   }
@@ -398,24 +429,23 @@ export function drawRace(ctx,race,time) {
     } else moving(distance,driver.x,(x,y,size)=>kart(ctx,x,y,size,driver,time));
   }
   for(const mark of race.skids) moving(mark.distance,mark.x,(x,y,size)=>skidMarks(ctx,x,y,size,mark,time));
+  const ahead=distance=>((distance-player.distance)%LENGTH+LENGTH)%LENGTH;
   for(const box of race.boxes) {
-    if(box.readyAt<=time) moving(box.distance,box.x,(x,y,size)=>{if(size>=2)itemBox(ctx,x,y,size*.78,time);});
+    if(box.readyAt<=time&&ahead(box.distance)<3700) moving(box.distance,box.x,(x,y,size)=>{if(size>=2)itemBox(ctx,x,y,size*.78,time);});
   }
   for(const trap of race.traps) {
-    if(trap.armedAt<=time) moving(trap.distance,trap.x,(x,y,size)=>{if(size>=2)slipPad(ctx,x,y,size);});
+    if(trap.armedAt<=time&&ahead(trap.distance)<3100) moving(trap.distance,trap.x,(x,y,size)=>{if(size>=2)slipPad(ctx,x,y,size);});
   }
   for(const disc of race.discs) moving(disc.distance,disc.x,(x,y,size)=>{if(size>=2)coilDisc(ctx,x,y,size,time);});
   roadLayers.sort((a,b)=>b.depth-a.depth);
-  for(const {entry,exit} of roadLayers) roadBand(ctx,view,entry,exit,true);
-  for(const {entry,exit} of roadLayers) roadBand(ctx,view,entry,exit,false);
+  ctx.save();
+  for(const terrain of [true,false]) for(const {entry,exit,depth} of roadLayers) {
+    ctx.globalAlpha=Math.max(.16,Math.min(1,(farPlane-depth)/3300));
+    roadBand(ctx,view,entry,exit,terrain);
+  }
+  ctx.restore();
   scene.sort((a,b)=>b.depth-a.depth);
   for(const {paint} of scene) paint();
 
-  if(player.speed>TOP_SPEED*1.04){
-    const flicker=Math.floor(time*30)%4;
-    const color=player.chaseBoost>0?'#abf6df':player.itemBoost>0||player.boost>0||player.turboLevel===2?'#f5d49b':'#a7dcf2';
-    polygon(ctx,color,[[w*.13,h*.77+flicker*4],[w*.15,h*.74+flicker*4],[w*.17,h*.715+flicker*4]]);
-    polygon(ctx,color,[[w*.90,h*.73+flicker*4],[w*.875,h*.695+flicker*4],[w*.86,h*.69+flicker*4]]);
-    rect(ctx,color,w*.07,h*.88+flicker*3,2,7);
-  }
+  speedStreaks(ctx,view,time,player);
 }

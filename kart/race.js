@@ -1,7 +1,7 @@
-import {COUNTDOWN, DRIFT_FIRST, DRIFT_SECOND, ITEMS, ITEM_CAPACITY, LAPS, TOP_SPEED, approachingHairpin, cancelDrift, createRace, launchRace, order, recoverKart, segmentAt, stepRace} from './track.js?v=8';
-import {drawRace} from './render.js?v=8';
-import {drawMinimap} from './minimap.js?v=4';
-import {createRaceAudio} from './audio.js?v=3';
+import {COUNTDOWN, DRIFT_FIRST, DRIFT_SECOND, ITEMS, ITEM_CAPACITY, LAPS, TOP_SPEED, approachingHairpin, cancelDrift, createRace, launchRace, order, recoverKart, segmentAt, stepRace} from './track.js?v=9';
+import {drawRace} from './render.js?v=9';
+import {drawMinimap} from './minimap.js?v=5';
+import {createRaceAudio} from './audio.js?v=4';
 
 const $ = id => document.getElementById(id);
 const canvas = $('road'), context = canvas.getContext('2d');
@@ -263,7 +263,7 @@ function updateHUD() {
   const place=race.finishPlace??order(race.racers).indexOf(race.player)+1;
   for (const [id,value] of [
     ['place',String(place)],['lap',race.lastLap+' / '+LAPS],
-    ['time',formatTime(race.player.finished??race.time)],['speed',String(Math.round(race.player.speed/TOP_SPEED*108))],
+    ['time',formatTime(race.player.finished??race.time)],['speed',String(Math.round(race.player.speed/TOP_SPEED*124))],
   ]) if ($(id).textContent!==value) $(id).textContent=value;
   updateItemHUD();
   const distance=race.player.distance;

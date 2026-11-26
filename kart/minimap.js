@@ -1,5 +1,5 @@
-import {HAIRPIN_START, HAIRPIN_END, LENGTH, SEGMENT, approachingHairpin} from './track.js?v=8';
-import {mapPose as pose} from './course.js?v=2';
+import {HAIRPIN_START, HAIRPIN_END, LENGTH, SEGMENT, approachingHairpin} from './track.js?v=9';
+import {mapPose as pose} from './course.js?v=3';
 
 const outline=new Path2D();
 for(let i=0;i<=LENGTH/SEGMENT;i++){

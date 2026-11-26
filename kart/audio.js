@@ -1,4 +1,4 @@
-import {TOP_SPEED} from './track.js?v=8';
+import {TOP_SPEED} from './track.js?v=9';
 
 const cues = {
   picked: [[610,660,0,.10,'triangle'],[865,1010,.068,.15,'square']],
