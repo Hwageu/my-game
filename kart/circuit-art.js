@@ -1,4 +1,4 @@
-import {LENGTH,roadHeight} from './track.js?v=11';
+import {LENGTH,roadHeight} from './track.js?v=12';
 import {coursePose,distanceFor,roadPosition} from './course.js?v=3';
 
 export const structures=[];

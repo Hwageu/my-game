@@ -19,7 +19,17 @@ export const ITEMS = {
   disc: '코일 디스크',
   chase: '추격 부스터',
 };
+export const ITEM_HINTS = {
+  boost:'직선에서 짧게 가속',
+  shield:'충돌·공격 한 번 방어',
+  slip:'뒤차 길에 함정 설치',
+  grip:'코너·잔디에서 접지력 증가',
+  pulse:'가까운 카트를 밀어내며 감속',
+  disc:'앞 카트를 추적해 감속',
+  chase:'직선에서 길게 가속',
+};
 export const ITEM_CAPACITY = 2;
+const discSpeed=2210;
 export const HAIRPIN_START = distanceFor(82);
 export const HAIRPIN_END = distanceFor(117);
 const CHICANE_FIRST=169, CHICANE_LAST=197;
@@ -79,11 +89,11 @@ const drivers = [
   ['MOSS', '#ee8965', '#ffd1a0', '#a05564'],
 ];
 const styles = [
-  { brake:.012, line:.11, passing:1.02, drift:6.4 },
-  { brake:.009, line:-.14, passing:1.08, drift:5.7 },
-  { brake:.017, line:-.19, passing:.83, drift:7.8 },
-  { brake:.010, line:.16, passing:1.27, drift:6.1 },
-  { brake:.014, line:-.06, passing:.95, drift:6.9 },
+  { brake:.007, line:.095, apex:.078, passing:1.01, drift:5.3 },
+  { brake:.006, line:-.035, apex:.082, passing:1.13, drift:5.0 },
+  { brake:.009, line:.039, apex:.076, passing:.85, drift:5.8 },
+  { brake:.008, line:.095, apex:.075, passing:1.26, drift:5.2 },
+  { brake:.008, line:.065, apex:.079, passing:.98, drift:5.6 },
 ];
 const grid = [[-.45,-320],[.45,-70],[-.45,-70],[-.45,-195],[.45,-195],[.45,-320]];
 
@@ -124,7 +134,7 @@ export function applyStartBoost(racer,secondsHeld) {
 }
 
 export function launchRace(race,heldFor) {
-  const timings=[.71,.25,1.14,.87,.05];
+  const timings=[.71,.25,.48,.87,.94];
   race.racers.slice(1).forEach((racer,i)=>applyStartBoost(racer,timings[i]));
   return applyStartBoost(race.player,heldFor);
 }
@@ -190,8 +200,8 @@ function raceGap(from, to) {
   return mod(to - from + LENGTH / 2, LENGTH) - LENGTH / 2;
 }
 
-function itemEvent(race,racer,type,item) {
-  const event={type,item,time:race.time,until:race.time+1.4};
+function itemEvent(race,racer,type,item,details={}) {
+  const event={type,item,...details,time:race.time,until:race.time+1.85};
   if(racer.effects.length===4) racer.effects.shift();
   racer.effects.push(event);
   if(racer===race.player) race.itemEvent=event;
@@ -229,8 +239,17 @@ function frontTarget(race,distance,x,owner,range) {
   return target;
 }
 
+export function incomingDisc(race,racer) {
+  return race.discs.some(disc=>{
+    const gap=raceGap(disc.distance,racer.distance);
+    const closing=discSpeed-racer.speed;
+    return disc.owner!==racer.id&&gap>0&&gap<closing*1.05&&
+      frontTarget(race,disc.distance,disc.x,disc.owner,1200)===racer;
+  });
+}
+
 function stepDiscs(race,dt,moves) {
-  const travel=2210*dt;
+  const travel=discSpeed*dt;
   race.discs=race.discs.filter(disc=>{
     if(disc.expiresAt<=race.time) return false;
     const target=frontTarget(race,disc.distance,disc.x,disc.owner,1200);
@@ -247,7 +266,11 @@ function stepDiscs(race,dt,moves) {
       if(t<first&&Math.abs(x-otherX)<.24){first=t;hit=racer;}
     }
     if(hit) {
-      if(!preventHit(race,hit)) slowKart(race,hit,'disc');
+      const owner=race.racers[disc.owner];
+      if(!preventHit(race,hit,owner)) {
+        slowKart(race,hit,'disc',owner);
+        if(owner===race.player) itemEvent(race,owner,'landed','disc',{target:hit.name});
+      }
       return false;
     }
     disc.distance+=travel;
@@ -255,27 +278,35 @@ function stepDiscs(race,dt,moves) {
   });
 }
 
-function slowKart(race,racer,item) {
+function slowKart(race,racer,item,source) {
   const [factor,seconds]=item==='pulse'?[.83,.72]:item==='disc'?[.71,1.13]:[.78,1];
   racer.speed*=factor;
   racer.slow=Math.max(racer.slow,seconds);
   cancelDrift(racer);
-  itemEvent(race,racer,'slipped',item);
+  itemEvent(race,racer,'slipped',item,{source:source.name});
 }
 
 function useItem(race,racer) {
   const item=racer.items.shift()?.type;
   if(!item) return;
-  if(item==='boost') racer.itemBoost=1.10;
-  if(item==='chase') racer.chaseBoost=1.85;
+  if(item==='boost'||item==='chase') {
+    const chase=item==='chase';
+    if(chase) racer.chaseBoost=1.85;
+    else racer.itemBoost=1.10;
+    racer.speed=Math.max(racer.speed,Math.min(boostedSpeed(racer),racer.speed+(chase?410:310)));
+  }
   if(item==='disc') race.discs.push({owner:racer.id,x:racer.x,distance:racer.distance+94,expiresAt:race.time+2.35});
   if(item==='shield') racer.shield=4.5;
   if(item==='grip') racer.grip=2.4;
   if(item==='slip') race.traps.push({owner:racer.id,x:racer.x,distance:racer.distance-78,armedAt:race.time+.22,expiresAt:race.time+16});
+  let affected=0;
   if(item==='pulse') for(const other of nearby(race,racer)) {
-    if(!preventHit(race,other)) slowKart(race,other,item);
+    if(preventHit(race,other,racer))continue;
+    other.heading+=limit((other.x-racer.x)*.20,-.13,.13);
+    slowKart(race,other,'pulse',racer);
+    affected++;
   }
-  itemEvent(race,racer,'used',item);
+  itemEvent(race,racer,'used',item,{affected});
 }
 
 function aiItem(race,racer,curve,traffic) {
@@ -286,7 +317,7 @@ function aiItem(race,racer,curve,traffic) {
     (longHold||(!racer.boost&&!racer.turbo&&curve<5));
   if(held.type==='chase') return racer.speed>450&&(longHold||curve<6);
   if(held.type==='disc') return longHold||frontTarget(race,racer.distance,racer.x,racer.id,1150)!==null;
-  if(held.type==='shield') return longHold||traffic.some(({gap})=>Math.abs(gap)<155);
+  if(held.type==='shield') return longHold||incomingDisc(race,racer)||traffic.some(({gap})=>Math.abs(gap)<155);
   if(held.type==='grip') return longHold||curve>7.5||Math.abs(racer.x)>.92;
   if(held.type==='pulse') return longHold||nearby(race,racer).length>0;
   return longHold||race.racers.some(other=>{
@@ -295,10 +326,10 @@ function aiItem(race,racer,curve,traffic) {
   });
 }
 
-function preventHit(race,racer) {
+function preventHit(race,racer,source) {
   if(racer.shield<=0) return false;
   racer.shield=0;
-  itemEvent(race,racer,'blocked','shield');
+  itemEvent(race,racer,'blocked','shield',{source:source?.name});
   return true;
 }
 
@@ -333,8 +364,10 @@ function resolveItems(race,moves) {
       itemEvent(race,racer,'picked',item);
     } else if(object.expiresAt>race.time) {
       object.expiresAt=race.time;
-      if(preventHit(race,racer)) continue;
-      slowKart(race,racer,'slip');
+      const owner=race.racers[object.owner];
+      if(preventHit(race,racer,owner)) continue;
+      slowKart(race,racer,'slip',owner);
+      if(owner===race.player) itemEvent(race,owner,'landed','slip',{target:racer.name});
     }
   }
 }
@@ -344,8 +377,9 @@ function planAI(racer,race) {
   const style=styles[racer.id-1];
   const here=segmentAt(racer.distance);
   const atEntry=segmentAt(racer.distance+360);
-  const setup=Math.abs(here.curve)>2 ? here.curve*.037 : -atEntry.curve*.029;
-  const line=limit(setup+style.line,-.56,.56);
+  const setup=Math.abs(here.curve)>1.6?here.curve*style.apex:-atEntry.curve*.026;
+  const edge=here.width-.14;
+  const line=limit(setup+style.line,-edge,edge);
   let lane=line;
   let best=-Infinity;
   const ceiling=boostedSpeed(racer);
@@ -369,10 +403,15 @@ function planAI(racer,race) {
     const gap=raceGap(racer.distance,trap.distance);
     return trap.owner!==racer.id&&gap>0&&gap<380&&trap.armedAt<=time;
   });
-  const safeLane=here.width-.16;
+  const safeLane=edge;
   const itemLanes=upcomingBoxes.map(box=>box.x).filter(x=>Math.abs(x)<=safeLane);
-  for (const candidate of [line,-.59,0,.59,...new Set(itemLanes)]) {
-    let value = -Math.abs(candidate - line) * 1.22 - Math.abs(candidate - racer.lane) * .58;
+  const pad=boosts.find(surface=>{
+    const gap=raceGap(racer.distance,surface.segment*SEGMENT);
+    return gap>=-SEGMENT*2&&gap<650;
+  });
+  const padLanes=pad?[pad.lane]:[];
+  for (const candidate of [line,-.59,0,.59,...new Set([...itemLanes,...padLanes])]) {
+    let value = -Math.abs(candidate - line) * 1.65 - Math.abs(candidate - racer.lane) * .58;
     for (const {other, gap} of traffic) {
       const lateral=Math.abs(other.x-candidate);
       const overlap=limit((.40-lateral)/.40,0,1);
@@ -380,7 +419,8 @@ function planAI(racer,race) {
       const spacing=gap>0?(1-gap/650)*closing*3.25:(1+gap/140)*2.15;
       value-=overlap*spacing*style.passing;
     }
-    if(upcomingBoxes.some(box=>Math.abs(box.x-candidate)<.18)) value+=racer.driftSide?.32:.84;
+    if(upcomingBoxes.some(box=>Math.abs(box.x-candidate)<.18)) value+=racer.driftSide?.18:.58;
+    if(pad&&Math.abs(candidate-pad.lane)<.16) value+=racer.driftSide?.42:1.15;
     if(upcomingTraps.some(trap=>Math.abs(trap.x-candidate)<.24)) value-=racer.shield?0:1.75;
     if (value > best) { best = value; lane = candidate; }
   }

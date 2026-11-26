@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>TIDELINE GP · 인디 힐 서킷</title>
-  <link rel="stylesheet" href="race.css?v=9">
+  <link rel="stylesheet" href="race.css?v=10">
 </head>
 <body>
   <main class="cab" aria-label="타이드라인 그랑프리">
@@ -29,9 +29,11 @@
             <li><span>1</span><strong id="heldItem">비어 있음</strong></li>
             <li><span>2</span><strong id="reserveItem">비어 있음</strong></li>
           </ol>
+          <p class="item-hint" id="itemHint" hidden></p>
         </div>
-        <p class="item-notice" id="itemNotice" hidden></p>
+        <p class="item-notice" id="itemNotice" role="status" hidden></p>
       </aside>
+      <p class="item-warning" id="itemWarning" role="status" hidden></p>
       <p class="turn-hint" id="turnHint" hidden>U자 우회전</p>
       <div class="speed" aria-hidden="true"><span id="boost" hidden>BOOST</span><strong id="speed">0</strong> km/h</div>
       <div class="drift-status" id="driftStatus" hidden data-tier="0"><span id="driftLabel">드리프트</span><div class="drift-meter" aria-hidden="true"><i id="driftFill"></i></div></div>
@@ -57,10 +59,10 @@
       <div class="pedals">
         <button type="button" data-drive="brake">브레이크</button>
         <button type="button" data-drive="drift">드리프트</button>
-        <button type="button" id="useItem" disabled>아이템</button>
+        <button type="button" id="useItem" aria-describedby="itemHint" disabled>아이템</button>
       </div>
     </div>
   </main>
-  <script type="module" src="race.js?v=11"></script>
+  <script type="module" src="race.js?v=12"></script>
 </body>
 </html>

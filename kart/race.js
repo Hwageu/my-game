@@ -1,7 +1,7 @@
-import {COUNTDOWN, DRIFT_FIRST, DRIFT_SECOND, ITEMS, ITEM_CAPACITY, LAPS, TOP_SPEED, approachingHairpin, cancelDrift, createRace, launchRace, order, recoverKart, segmentAt, stepRace} from './track.js?v=11';
-import {drawRace} from './render.js?v=11';
-import {drawMinimap} from './minimap.js?v=7';
-import {createRaceAudio} from './audio.js?v=6';
+import {COUNTDOWN, DRIFT_FIRST, DRIFT_SECOND, ITEMS, ITEM_CAPACITY, ITEM_HINTS, LAPS, TOP_SPEED, approachingHairpin, cancelDrift, createRace, incomingDisc, launchRace, order, recoverKart, segmentAt, stepRace} from './track.js?v=12';
+import {drawRace} from './render.js?v=12';
+import {drawMinimap} from './minimap.js?v=8';
+import {createRaceAudio} from './audio.js?v=7';
 
 const $ = id => document.getElementById(id);
 const canvas = $('road'), context = canvas.getContext('2d');
@@ -283,6 +283,20 @@ function updateHUD() {
   $('driftFill').style.width=Math.min(1,driftCharge/DRIFT_SECOND)*100+'%';
 }
 
+function describeItemEvent(event) {
+  const {type,item,source,target,affected}=event;
+  if(type==='picked') return ITEMS[item]+' 획득';
+  if(type==='landed') return target+' 감속 · '+ITEMS[item];
+  if(type==='blocked') return source?source+' 공격 방어':'실드로 충돌 방어';
+  if(type==='slipped') return source+'의 '+ITEMS[item]+'에 감속';
+  if(item==='boost'||item==='chase') return '가속 중 · '+ITEMS[item];
+  if(item==='shield') return '실드 켜짐 · 1회 방어';
+  if(item==='grip') return '접지력 증가';
+  if(item==='slip') return '뒤쪽에 함정 설치';
+  if(item==='disc') return '앞쪽으로 디스크 발사';
+  return affected?'펄스 적중 · '+affected+'대 감속':'펄스 빗나감';
+}
+
 function updateItemHUD() {
   const dock=$('itemDock'), items=race.player.items;
   dock.hidden=mode==='title';
@@ -296,12 +310,29 @@ function updateItemHUD() {
   itemButton.disabled=!items.length||mode!=='playing';
   const label=items.length?ITEMS[items[0].type]+' 사용, '+items.length+'개 보유':'아이템 없음';
   if(itemButton.getAttribute('aria-label')!==label) itemButton.setAttribute('aria-label',label);
+  const hint=$('itemHint'), held=items[0]?.type;
+  hint.hidden=!held;
+  const hintText=held?(touch?'':'E · ')+ITEM_HINTS[held]:'';
+  if(hint.textContent!==hintText) hint.textContent=hintText;
+
   const notice=$('itemNotice'), event=race.itemEvent;
-  notice.hidden=!event||event.until<=race.time||mode!=='playing';
+  const recent=event&&event.until>race.time;
+  const activeEffects=[];
+  if(race.player.shield>0) activeEffects.push('실드 켜짐');
+  if(race.player.grip>0) activeEffects.push('접지력 증가');
+  const message=recent?describeItemEvent(event):activeEffects.join(' · ');
+  notice.hidden=mode!=='playing'||!message;
   if(!notice.hidden) {
-    const name=ITEMS[event.item];
-    const messages={picked:name+' 획득',used:name+' 사용',blocked:'실드로 충격 방어',slipped:event.item==='pulse'?'펄스에 밀림':event.item==='disc'?'코일 디스크 피격':'슬립 패드에 미끄러짐'};
-    if(notice.textContent!==messages[event.type]) notice.textContent=messages[event.type];
+    const kind=recent?event.type:'active';
+    if(notice.dataset.kind!==kind) notice.dataset.kind=kind;
+    if(notice.textContent!==message) notice.textContent=message;
+  }
+
+  const warning=$('itemWarning');
+  warning.hidden=mode!=='playing'||!incomingDisc(race,race.player);
+  if(!warning.hidden) {
+    const warningText=race.player.shield>0?'디스크 접근 · 실드 켜짐':held==='shield'?'디스크 접근 · 실드 사용':'디스크 접근 · 옆으로 피하기';
+    if(warning.textContent!==warningText) warning.textContent=warningText;
   }
 }
 
