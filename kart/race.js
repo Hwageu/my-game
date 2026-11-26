@@ -1,8 +1,10 @@
-import {COUNTDOWN, DRIFT_FIRST, DRIFT_SECOND, LAPS, TOP_SPEED, cancelDrift, createRace, order, stepRace} from './track.js?v=3';
-import {drawRace} from './render.js?v=3';
+import {COUNTDOWN, DRIFT_FIRST, DRIFT_SECOND, ITEMS, LAPS, TOP_SPEED, cancelDrift, createRace, order, stepRace} from './track.js?v=4';
+import {drawRace} from './render.js?v=4';
 
 const $ = id => document.getElementById(id);
 const canvas = $('road'), context = canvas.getContext('2d');
+const itemButton = $('useItem');
+let itemQueued = false;
 const controls = [...document.querySelectorAll('[data-drive]')];
 const embedded = parent !== window;
 let touch = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
@@ -37,6 +39,7 @@ new ResizeObserver(resize).observe(canvas);
 
 function clearInput() {
   keys.clear();
+  itemQueued=false;
   cancelDrift(race.player);
   for (const [pointer,button] of pointers) {
     if (button.hasPointerCapture(pointer)) button.releasePointerCapture(pointer);
@@ -48,7 +51,7 @@ function clearInput() {
 function readInput() {
   const held = action => [...keys].some(code => keyMap.get(code) === action) ||
     [...pointers.values()].some(button => button.dataset.drive === action);
-  return {steer:Number(held('right'))-Number(held('left')), brake:held('brake'), drift:held('drift'), throttle:touch||held('throttle')};
+  return {steer:Number(held('right'))-Number(held('left')), brake:held('brake'), drift:held('drift'), throttle:touch||held('throttle'), useItem:itemQueued};
 }
 function report() {
   if (embedded) parent.postMessage({type:'void-state',mode:mode==='finished'?'won':mode,lastStage:true},location.origin);
@@ -73,8 +76,8 @@ function setOverlay() {
       : '인디 힐 서킷 · 6대 · 2바퀴';
     $('help').hidden = !onTitle;
     $('help').textContent = touch
-      ? '자동 가속 · 좌우로 조향 · 코너에서 드리프트를 누르고 놓아 가속'
-      : '↑ 가속 · ↓ 브레이크 · ← → 조향\nShift + 조향으로 드리프트 · 놓으면 미니터보';
+      ? '자동 가속 · 코너에서 드리프트를 놓으면 미니터보\n박스를 지나고 아이템 버튼으로 사용'
+      : '↑ 가속 · ↓ 브레이크 · ← → 조향\nShift + 조향으로 드리프트 · 놓으면 미니터보\n박스 획득 후 E로 아이템 사용';
     $('best').hidden = best<=0;
     $('best').textContent = '최고 기록 ' + formatTime(best);
     $('start').textContent = onTitle?'경주 시작':mode==='paused'?'경주 재개':'다시 달리기';
@@ -181,8 +184,19 @@ for (const button of controls) {
     });
   }
 }
+function queueItem() {
+  if(mode==='playing'&&race.player.item) {
+    itemQueued=true;
+    ensureAudio();
+  }
+}
+itemButton.onclick=queueItem;
 document.addEventListener('keydown',event=>{
   if (event.ctrlKey||event.metaKey||event.altKey) return;
+  if(event.code==='KeyE') {
+    event.preventDefault();
+    if(!event.repeat) queueItem();
+  }
   if (keyMap.has(event.code)) {
     event.preventDefault();
     if (mode==='playing'||mode==='countdown') keys.add(event.code);
@@ -231,9 +245,10 @@ function updateHUD() {
     ['place',place+' / '+race.racers.length],['lap',race.lastLap+' / '+LAPS],
     ['time',formatTime(race.player.finished??race.time)],['speed',String(Math.round(race.player.speed/TOP_SPEED*108))],
   ]) if ($(id).textContent!==value) $(id).textContent=value;
-  const {boost,turbo,driftSide,driftCharge}=race.player;
-  $('boost').hidden=boost<=0&&turbo<=0;
-  const boostLabel=boost>0?'BOOST':'미니터보';
+  updateItemHUD();
+  const {boost,turbo,itemBoost,driftSide,driftCharge}=race.player;
+  $('boost').hidden=itemBoost<=0&&boost<=0&&turbo<=0;
+  const boostLabel=itemBoost>0?'터보 캔':boost>0?'BOOST':'미니터보';
   if($('boost').textContent!==boostLabel) $('boost').textContent=boostLabel;
   const tier=driftCharge>=DRIFT_SECOND?2:driftCharge>=DRIFT_FIRST?1:0;
   const driftLabel=tier===2?'강한 미니터보':tier===1?'미니터보 준비':'드리프트';
@@ -241,6 +256,25 @@ function updateHUD() {
   $('driftStatus').dataset.tier=String(tier);
   if($('driftLabel').textContent!==driftLabel) $('driftLabel').textContent=driftLabel;
   $('driftFill').style.width=Math.min(1,driftCharge/DRIFT_SECOND)*100+'%';
+}
+
+function updateItemHUD() {
+  const item=race.player.item, name=ITEMS[item]??'비어 있음';
+  if($('heldItem').textContent!==name) $('heldItem').textContent=name;
+  const slot=$('itemSlot');
+  slot.hidden=mode==='title';
+  const itemType=item??'';
+  if(slot.dataset.item!==itemType) slot.dataset.item=itemType;
+  itemButton.disabled=!item||mode!=='playing';
+  const label=item?name+' 사용':'아이템 없음';
+  if(itemButton.getAttribute('aria-label')!==label) itemButton.setAttribute('aria-label',label);
+  const notice=$('itemNotice'), event=race.itemEvent;
+  notice.hidden=!event||event.until<=race.time||mode!=='playing';
+  if(!notice.hidden){
+    const itemName=ITEMS[event.item];
+    const texts={picked:itemName+' 획득',used:itemName+' 사용',blocked:'실드로 충격 방어',slipped:'슬립 패드에 미끄러짐'};
+    if(notice.textContent!==texts[event.type]) notice.textContent=texts[event.type];
+  }
 }
 
 const fixedStep=1/120;
@@ -269,10 +303,15 @@ function frame(now) {
     const input=readInput();
     const lap=race.lastLap;
     const boost=race.player.boost, turbo=race.player.turbo;
-    const charge=race.player.driftCharge;
+    const charge=race.player.driftCharge, itemEvent=race.itemEvent;
     while (accumulator>=fixedStep && race.player.finished===null) {
       stepRace(race,fixedStep,input);
+      if(input.useItem){itemQueued=false;input.useItem=false;}
       accumulator-=fixedStep;
+    }
+    if(race.itemEvent && race.itemEvent!==itemEvent) {
+      const tones={picked:600,used:490,blocked:740,slipped:190};
+      tone(tones[race.itemEvent.type],.17);
     }
     if (race.lastLap!==lap) tone(640,.22);
     if ((race.player.boost>0 && boost===0) || (race.player.turbo>0 && turbo===0)) tone(360,.20);

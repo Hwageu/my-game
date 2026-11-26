@@ -95,3 +95,25 @@ button:focus-visible {outline:2px solid #ffd885;outline-offset:3px}
   .panel h1 {font-size:clamp(25px,7vh,46px)}
   .panel p {margin:4px 0}
 }
+
+.item-slot,.item-notice {
+  position:absolute;right:12px;
+  color:#f6ead0;background:#17303bef;
+  border:1px solid #83adab;border-radius:3px;
+  pointer-events:none;
+}
+.item-slot {top:62px;display:grid;gap:2px;min-width:82px;padding:5px 8px}
+.item-slot small {color:#c2dcce;font-size:11px}
+.item-slot strong {font-size:13px;line-height:1.25}
+.item-slot[data-item=boost] strong {color:#ffcd78}
+.item-slot[data-item=shield] strong {color:#9ce8e0}
+.item-slot[data-item=slip] strong {color:#e7b9ee}
+.item-notice {top:113px;margin:0;padding:4px 8px;font-size:12px}
+#useItem:disabled {color:#aebeb7;background:#233843;cursor:default}
+#useItem:not(:disabled) {color:#202f39;background:#b8a6e1;border-color:#e6d9ff}
+#useItem:not(:disabled):active {background:#e7d9ff}
+@media(max-width:350px){
+  .pedals {gap:4px}
+  .item-slot,.item-notice {right:6px}
+  .touch-bar {gap:6px}
+}

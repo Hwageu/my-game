@@ -1,4 +1,4 @@
-import {DRIFT_FIRST, DRIFT_SECOND, LENGTH, ROAD, SEGMENT, TOP_SPEED, roadHeight, segmentAt} from './track.js?v=3';
+import {DRIFT_FIRST, DRIFT_SECOND, LENGTH, ROAD, SEGMENT, TOP_SPEED, roadHeight, segmentAt} from './track.js?v=4';
 
 const fog = '#a8ddd4';
 const zones = {
@@ -108,6 +108,20 @@ function turnSign(ctx, point, direction) {
     [x-size*.33*direction,y-size*.19],
   ]);
 }
+function itemBox(ctx,x,y,size,time) {
+  const bob=Math.round(Math.sin(time*5)*size*.08);
+  rect(ctx,'#333949',x-size*.48,y-2,size*.96,3);
+  y-=size*.28+bob;
+  polygon(ctx,'#47437b',[[x-size*.49,y],[x+size*.34,y],[x+size*.49,y-size*.20],[x+size*.49,y-size],[x-size*.49,y-size]]);
+  rect(ctx,'#8c78c2',x-size*.49,y-size,size*.80,size*.86);
+  rect(ctx,'#d9c8f6',x-size*.49,y-size,size*.80,size*.11);
+  rect(ctx,'#605599',x-size*.42,y-size*.82,size*.65,size*.62);
+  polygon(ctx,'#ffe7a7',[[x-size*.03,y-size*.77],[x-size*.28,y-size*.45],[x-size*.08,y-size*.45],[x-size*.17,y-size*.25],[x+size*.14,y-size*.56],[x-size*.02,y-size*.56]]);
+}
+function slipPad(ctx,x,y,size) {
+  polygon(ctx,'#593c65',[[x-size*.63,y],[x+size*.64,y],[x+size*.41,y-size*.21],[x-size*.43,y-size*.21]]);
+  rect(ctx,'#e9b8f0',x-size*.32,y-size*.19,size*.64,Math.max(1,size*.08));
+}
 function kart(ctx, x, y, size, driver, time) {
   const tilt = Math.round((driver.steering*.14+driver.driftSide*.095)*size);
   const bounce = driver.speed>230 ? Math.floor(time*16)%2 : 0;
@@ -123,9 +137,9 @@ function kart(ctx, x, y, size, driver, time) {
       draw(sparks,(-.60-pulse*.044)*side,.05+pulse*.03,.066,.05);
     }
   }
-  if (driver.boost>0 || driver.turbo>0) {
+  if (driver.itemBoost>0 || driver.boost>0 || driver.turbo>0) {
     const ripple = Math.floor(time*23)%3;
-    const flame=driver.boost>0||driver.turboLevel===2?'#f4a449':'#6ecbff';
+    const flame=driver.itemBoost>0||driver.boost>0||driver.turboLevel===2?'#f4a449':'#6ecbff';
     draw(flame,-.26,-.03,.14,.17+ripple*.05);
     draw('#f9de9a',.12,-.03,.14,.22-ripple*.035);
   }
@@ -147,6 +161,16 @@ function kart(ctx, x, y, size, driver, time) {
   draw('#ede2c4',-.21,-.78,.42,.075,tilt);
   draw('#28343e',-.14,-.70,.28,.09,tilt);
   if (driver.hit>.22) draw('#efc97a',.4,-.76,.16,.09);
+  if(driver.shield>0){
+    ctx.save();
+    ctx.strokeStyle='#a1efe1';
+    ctx.lineWidth=Math.max(1,size*.047);
+    ctx.beginPath();
+    ctx.ellipse(x,y-size*.48,size*.63,size*.55,0,0,Math.PI*2);
+    ctx.stroke();
+    ctx.restore();
+  }
+  if(driver.slow>0) draw('#dfb0ea',-.45,-.06,.88,.09);
 }
 
 export function drawRace(ctx,race,time) {
@@ -181,14 +205,23 @@ export function drawRace(ctx,race,time) {
 
   sky(ctx,w,h,horizon,-player.x*13-segmentAt(player.distance+650).curve*1.5);
   const buckets = new Map();
-  for (const driver of racers) {
-    const distance = driver.finished === null || driver === player ? driver.distance : driver.distance + 60 + driver.id*42;
-    const inFront = ((distance-cameraZ)%LENGTH+LENGTH)%LENGTH;
-    if (inFront<55 || inFront>=99*SEGMENT) continue;
-    const i=Math.floor((inFront+cameraZ-base)/SEGMENT);
+  function place(object,distance) {
+    const depth=((distance-cameraZ)%LENGTH+LENGTH)%LENGTH;
+    if(depth<55||depth>=99*SEGMENT) return;
+    const i=Math.floor((depth+cameraZ-base)/SEGMENT);
     const list=buckets.get(i)||[];
-    list.push({driver, depth:inFront});
+    list.push({...object,depth});
     buckets.set(i,list);
+  }
+  for (const driver of racers) {
+    const distance=driver.finished===null||driver===player?driver.distance:driver.distance+60+driver.id*42;
+    place({kind:'kart',x:driver.x,driver},distance);
+  }
+  for(const box of race.boxes) {
+    if(box.readyAt<=time) place({kind:'box',x:box.x},box.distance);
+  }
+  for(const trap of race.traps) {
+    if(trap.armedAt<=time) place({kind:'trap',x:trap.x},trap.distance);
   }
 
   for (let i=points.length-2;i>=0;i--) {
@@ -206,17 +239,22 @@ export function drawRace(ctx,race,time) {
     }
     const list=buckets.get(i);
     if (!list) continue;
-    for (const {driver,depth} of list.sort((a,b)=>b.depth-a.depth)) {
+    for (const {kind,x,driver,depth} of list.sort((a,b)=>b.depth-a.depth)) {
       const amount=(depth-near.depth)/SEGMENT;
       const relativeX=near.center+(far.center-near.center)*amount-cameraX;
       const ground=near.segment.y+(far.segment.y-near.segment.y)*amount;
       const s=scale/depth;
-      kart(ctx,w/2+(relativeX+driver.x*ROAD)*s,horizon+(cameraY-ground)*s,Math.min(w*.22,s*105),driver,time);
+      const screenX=w/2+(relativeX+x*ROAD)*s;
+      const screenY=horizon+(cameraY-ground)*s;
+      const size=Math.min(w*.22,s*105);
+      if(kind==='kart') kart(ctx,screenX,screenY,size,driver,time);
+      if(kind==='box'&&size>=2) itemBox(ctx,screenX,screenY,size*.78,time);
+      if(kind==='trap'&&size>=2) slipPad(ctx,screenX,screenY,size);
     }
   }
   if(player.speed>TOP_SPEED*1.04){
     const flicker = Math.floor(time*30)%4;
-    const color=player.boost>0||player.turboLevel===2?'#f5d49b':'#a7dcf2';
+    const color=player.itemBoost>0||player.boost>0||player.turboLevel===2?'#f5d49b':'#a7dcf2';
     polygon(ctx,color,[[w*.13,h*.77+flicker*4],[w*.15,h*.74+flicker*4],[w*.17,h*.715+flicker*4]]);
     polygon(ctx,color,[[w*.90,h*.73+flicker*4],[w*.875,h*.695+flicker*4],[w*.86,h*.69+flicker*4]]);
     rect(ctx,color,w*.07,h*.88+flicker*3,2,7);
